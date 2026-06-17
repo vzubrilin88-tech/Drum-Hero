@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>DRUM HERO</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        body { background:#0a0a0f; overflow-x:hidden; touch-action:manipulation; }
+        @keyframes fadeUp {
+            0%   { opacity:1; transform:translateY(0) scale(1); }
+            100% { opacity:0; transform:translateY(-36px) scale(1.15); }
+        }
+        @keyframes countPop {
+            0%   { opacity:0; transform:scale(0.4); }
+            40%  { opacity:1; transform:scale(1.15); }
+            70%  { transform:scale(0.95); }
+            100% { opacity:1; transform:scale(1); }
+        }
+        @keyframes pulse {
+            0%,100% { opacity:0.3; }
+            50%      { opacity:1; }
+        }
+        @keyframes instrReveal {
+            0%   { opacity:0; transform:translateY(16px); }
+            100% { opacity:1; transform:translateY(0); }
+        }
+        @keyframes instrPing {
+            0%   { transform:scale(1); opacity:1; }
+            60%  { transform:scale(1.18); opacity:0.6; }
+            100% { transform:scale(1); opacity:1; }
+        }
+        .dot1 { animation:pulse 1s ease-in-out infinite 0s; }
+        .dot2 { animation:pulse 1s ease-in-out infinite 0.2s; }
+        .dot3 { animation:pulse 1s ease-in-out infinite 0.4s; }
+        button { cursor:pointer; font-family:'Courier New',monospace; }
+        button:hover { opacity:0.85; }
+        .touch-pad { transition:background 0.04s,box-shadow 0.04s; user-select:none; -webkit-user-select:none; }
+        .touch-pad:active { opacity:0.75; }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // MODE DEFINITIONS — improved with tonal peak filter & clustering windows
+    // ═══════════════════════════════════════════════════════════════════════════════
+    const MODES = {
+        drums: {
+            label:"Барабаны", emoji:"🥁", color:"#ff1744",
+            lanes:[
+                { key:"f", label:"F", name:"Kick",   color:"#ff1744" },
+                { key:"g", label:"G", name:"Cymbal", color:"#ff9100" },
+                { key:"h", label:"H", name:"Snare",  color:"#76ff03" },
+                { key:"j", label:"J", name:"Hi-Hat", color:"#00e5ff" },
+            ],
+            bandRanges: [[60,150],[150,350],[350,1200],[6000,18000]],
+            fluxThresh: 1.5,
+            deltaThresh: 1.3,
+            minEner: 0.008,
+            dedupSec: 0.06,
+            clusterWindowSec: 0.06,   // keep tight for drums
+            tonalPeakRatio: 0,         // no tonal filter
+        },
+        guitar: {
+            label:"Гитара / Бас", emoji:"🎸", color:"#aa00ff",
+            lanes:[
+                { key:"f", label:"F", name:"Низкие",    color:"#ff1744" },
+                { key:"g", label:"G", name:"Низ-Сред",  color:"#ff9100" },
+                { key:"h", label:"H", name:"Верх-Сред", color:"#76ff03" },
+                { key:"j", label:"J", name:"Высокие",   color:"#00e5ff" },
+            ],
+            bandRanges: [[80,300],[300,800],[800,2500],[2500,8000]],
+            fluxThresh: 1.2,
+            deltaThresh: 1.08,
+            minEner: 0.003,
+            dedupSec: 0.04,
+            clusterWindowSec: 0.10,    // merge close notes into strongest
+            tonalPeakRatio: 2.8,       // require clear spectral peak
+        },
+        synth: {
+            label:"Синт / Мелодия", emoji:"🎹", color:"#00e5ff",
+            lanes:[
+                { key:"f", label:"F", name:"Низкие",    color:"#ff1744" },
+                { key:"g", label:"G", name:"Низ-Сред",  color:"#ff9100" },
+                { key:"h", label:"H", name:"Верх-Сред", color:"#76ff03" },
+                { key:"j", label:"J", name:"Высокие",   color:"#00e5ff" },
+            ],
+            bandRanges: [[200,500],[500,1200],[1200,3500],[3500,12000]],
+            fluxThresh: 1.15,
+            deltaThresh: 1.05,
+            minEner: 0.002,
+            dedupSec: 0.04,
+            clusterWindowSec: 0.10,
+            tonalPeakRatio: 2.5,
+        },
+    };
+
+    const DIFFICULTIES = [
+        { id:"easy",   label:"EASY",   keep:1/3, hitMs:400, goodMs:600, color:"#76ff03", desc:"каждая 3-я нота" },
+        { id:"medium", label:"MEDIUM", keep:1/2, hitMs:220, goodMs:350, color:"#ff9100", desc:"каждая 2-я нота" },
+        { id:"hard",   label:"HARD",   keep:1,   hitMs:160, goodMs:260, color:"#ff1744", desc:"все ноты" },
+    ];
+
+    const TILE_HEIGHT = 28;
+    const HIT_ZONE_Y  = 82;
+    const TILE_SPEED  = 220;
+    const CANVAS_H    = 520;
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // FFT
+    // ═══════════════════════════════════════════════════════════════════════════════
+    function fftInPlace(re, im, n) {
+        let j=0;
+        for (let i=1;i<n;i++){
+            let bit=n>>1;
+            for(;j&bit;bit>>=1) j^=bit;
+            j^=bit;
+            if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]];}
+        }
+        for(let len=2;len<=n;len<<=1){
+            const ang=(-2*Math.PI)/len,wRe=Math.cos(ang),wIm=Math.sin(ang);
+            for(let i=0;i<n;i+=len){
+                let cRe=1,cIm=0;
+                for(let k=0;k<len/2;k++){
+                    const uRe=re[i+k],uIm=im[i+k];
+                    const vRe=re[i+k+len/2]*cRe-im[i+k+len/2]*cIm;
+                    const vIm=re[i+k+len/2]*cIm+im[i+k+len/2]*cRe;
+                    re[i+k]=uRe+vRe;im[i+k]=uIm+vIm;
+                    re[i+k+len/2]=uRe-vRe;im[i+k+len/2]=uIm-vIm;
+                    const nr=cRe*wRe-cIm*wIm;cIm=cRe*wIm+cIm*wRe;cRe=nr;
+                }
+            }
+        }
+    }
+    function computeFFTMag(signal,N){
+        const half=N/2,mag=new Float32Array(half);
+        const real=new Float32Array(signal),imag=new Float32Array(N);
+        fftInPlace(real,imag,N);
+        for(let i=0;i<half;i++) mag[i]=Math.sqrt(real[i]*real[i]+imag[i]*imag[i])/N;
+        return mag;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // TONAL PEAK CHECK – used for guitar/synth to suppress drums
+    // ═══════════════════════════════════════════════════════════════════════════════
+    function hasTonalPeak(mag, lo, hi, ratio) {
+        let sum = 0, maxVal = 0, maxIdx = lo;
+        for (let i = lo; i <= hi; i++) {
+            sum += mag[i];
+            if (mag[i] > maxVal) { maxVal = mag[i]; maxIdx = i; }
+        }
+        const avg = sum / (hi - lo + 1);
+        if (maxVal < avg * ratio) return false;
+        // check that neighbours are significantly lower -> sharp peak
+        const left = (maxIdx > lo) ? mag[maxIdx-1] : 0;
+        const right = (maxIdx < hi) ? mag[maxIdx+1] : 0;
+        if (left > maxVal * 0.7 || right > maxVal * 0.7) return false;
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // CLUSTERING – merges events within window, keeping strongest
+    // ═══════════════════════════════════════════════════════════════════════════════
+    function clusterEvents(events, windowSec, numBands) {
+        if (windowSec <= 0 || events.length === 0) return events;
+        const bands = Array.from({ length: numBands }, () => []);
+        events.forEach(ev => bands[ev.band].push(ev));
+        const result = [];
+        for (let b = 0; b < numBands; b++) {
+            const arr = bands[b].sort((a, b) => a.time - b.time);
+            let i = 0;
+            while (i < arr.length) {
+                let j = i + 1;
+                let best = arr[i];
+                while (j < arr.length && arr[j].time - arr[i].time < windowSec) {
+                    if (arr[j].energy > best.energy) best = arr[j];
+                    j++;
+                }
+                result.push({ time: best.time, lane: b });
+                i = j;
+            }
+        }
+        return result.sort((a, b) => a.time - b.time);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // UNIVERSAL ONSET DETECTOR (with tonal filter & clustering)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    async function detectOnsets(audioBuffer, modeCfg, onProgress) {
+        const sr=audioBuffer.sampleRate, nCh=audioBuffer.numberOfChannels, len=audioBuffer.length;
+        const mono=new Float32Array(len);
+        for(let c=0;c<nCh;c++){
+            const ch=audioBuffer.getChannelData(c);
+            for(let i=0;i<len;i++) mono[i]+=ch[i]/nCh;
+        }
+
+        const fftSize=2048;
+        const hopSize=Math.floor(sr*0.02);
+        const numFrames=Math.floor((len-fftSize)/hopSize)+1;
+        const freqRes=sr/fftSize;
+
+        const { bandRanges, fluxThresh, deltaThresh, minEner, dedupSec, clusterWindowSec, tonalPeakRatio } = modeCfg;
+        const numBands=bandRanges.length;
+        const bandIdx=bandRanges.map(([lo,hi])=>[
+            Math.max(0,Math.floor(lo/freqRes)),
+            Math.min(fftSize/2-1,Math.ceil(hi/freqRes))
+        ]);
+
+        const hann=new Float32Array(fftSize);
+        for(let i=0;i<fftSize;i++) hann[i]=0.5*(1-Math.cos(2*Math.PI*i/fftSize));
+
+        const events=[];
+        const prevE=new Float32Array(numBands);
+        const hist=Array.from({length:numBands},()=>[]);
+        const HIST_LEN=50;
+        const bandSum=new Float32Array(numBands);
+        const useTonal = tonalPeakRatio > 0;
+
+        for(let fi=0;fi<numFrames;fi++){
+            const start=fi*hopSize;
+            const windowed=new Float32Array(fftSize);
+            for(let i=0;i<fftSize;i++){
+                const s=start+i<len?mono[start+i]:0;
+                windowed[i]=s*hann[i];
+            }
+            const mag=computeFFTMag(windowed,fftSize);
+            const time=(start+fftSize/2)/sr;
+
+            for(let b=0;b<numBands;b++){
+                const [lo,hi]=bandIdx[b];
+                let e=0;
+                for(let j=lo;j<=hi;j++) e+=mag[j]*mag[j];
+                e=Math.sqrt(e/Math.max(hi-lo+1,1));
+                bandSum[b]+=e;
+
+                const h=hist[b];
+                h.push(e);
+                if(h.length>HIST_LEN) h.shift();
+                const avg=h.reduce((a,v)=>a+v,0)/h.length;
+
+                if(e>avg*fluxThresh && e>prevE[b]*deltaThresh && e>minEner){
+                    // Apply tonal peak filter for non‑drum modes
+                    if (useTonal && !hasTonalPeak(mag, lo, hi, tonalPeakRatio)) {
+                        prevE[b]=e;
+                        continue;
+                    }
+                    events.push({time, band:b, energy:e});
+                }
+                prevE[b]=e;
+            }
+
+            if(fi%600===0 && onProgress) onProgress(Math.floor((fi/numFrames)*85));
+        }
+
+        // First dedup (simple minimum distance)
+        const deduped=[], lastT=new Array(numBands).fill(-Infinity);
+        const sorted=[...events].sort((a,b)=>a.time-b.time);
+        for(const ev of sorted){
+            if(ev.time-lastT[ev.band]>dedupSec){
+                deduped.push({time:ev.time, band:ev.band, energy:ev.energy});
+                lastT[ev.band]=ev.time;
+            }
+        }
+
+        // Cluster (merge close hits, keep strongest)
+        const clustered = clusterEvents(deduped, clusterWindowSec, numBands);
+        const bandAvg=Array.from(bandSum).map(s=>s/numFrames);
+        return { events:clustered, bandAvg };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // INSTRUMENT CLASSIFIER (unchanged)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    async function classifyInstrument(audioBuffer) {
+        const sr=audioBuffer.sampleRate, nCh=audioBuffer.numberOfChannels, len=audioBuffer.length;
+        const mono=new Float32Array(Math.min(len, sr*60));
+        for(let c=0;c<nCh;c++){
+            const ch=audioBuffer.getChannelData(c);
+            for(let i=0;i<mono.length;i++) mono[i]+=ch[i]/nCh;
+        }
+        const fftSize=4096, hop=Math.floor(sr*0.05), numF=Math.floor((mono.length-fftSize)/hop);
+        const freqRes=sr/fftSize;
+        const hann=new Float32Array(fftSize);
+        for(let i=0;i<fftSize;i++) hann[i]=0.5*(1-Math.cos(2*Math.PI*i/fftSize));
+        const diagBands=[[20,80],[80,200],[200,500],[500,1200],[1200,3000],[3000,6000],[6000,12000],[12000,20000]];
+        const diagIdx=diagBands.map(([lo,hi])=>[Math.floor(lo/freqRes),Math.min(fftSize/2-1,Math.ceil(hi/freqRes))]);
+        const sums=new Float32Array(8);
+        for(let fi=0;fi<numF;fi++){
+            const start=fi*hop;
+            const w=new Float32Array(fftSize);
+            for(let i=0;i<fftSize;i++) w[i]=(start+i<mono.length?mono[start+i]:0)*hann[i];
+            const mag=computeFFTMag(w,fftSize);
+            for(let b=0;b<8;b++){
+                const [lo,hi]=diagIdx[b];
+                let e=0; for(let j=lo;j<=hi;j++) e+=mag[j]*mag[j];
+                sums[b]+=Math.sqrt(e/Math.max(hi-lo+1,1));
+            }
+        }
+        const avgs=Array.from(sums).map(s=>s/Math.max(numF,1));
+        const total=avgs.reduce((a,v)=>a+v,0)+1e-9;
+        const r=avgs.map(v=>v/total);
+        const kickEnergy   = r[0]+r[1];
+        const midEnergy    = r[2]+r[3]+r[4];
+        const hiEnergy     = r[5]+r[6]+r[7];
+        const hiRatio = hiEnergy / (kickEnergy + 0.001);
+        let type, confidence;
+        if(kickEnergy > 0.28 && hiRatio > 0.4) {
+            type="drums"; confidence=Math.round(Math.min((kickEnergy*1.5+hiRatio*0.3)*100,97));
+        } else if(kickEnergy > 0.30 && hiRatio < 0.3) {
+            type="guitar"; confidence=Math.round(Math.min(kickEnergy*180,97));
+        } else if(midEnergy > 0.50 && kickEnergy < 0.22) {
+            type="synth"; confidence=Math.round(Math.min(midEnergy*130,97));
+        } else if(kickEnergy > 0.20) {
+            type="guitar"; confidence=Math.round(Math.min(kickEnergy*120+midEnergy*40,85));
+        } else {
+            type="synth"; confidence=60;
+        }
+        return { type, confidence };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DIFFICULTY FILTER (unchanged)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    function filterByDifficulty(events,keep){
+        if(keep>=1) return events;
+        const perLane=[[],[],[],[]];
+        events.forEach((ev,i)=>perLane[ev.lane].push(i));
+        const kept=new Set();
+        perLane.forEach(idxs=>{
+            const step=Math.round(1/keep);
+            idxs.forEach((idx,pos)=>{ if(pos%step===0) kept.add(idx); });
+        });
+        return events.filter((_,i)=>kept.has(i));
+    }
+
+    // ── Hi-hat countdown click ────────────────────────────────────────────────────
+    function playClick(ctx,time=0){
+        const bufSize=Math.floor(ctx.sampleRate*0.08);
+        const buf=ctx.createBuffer(1,bufSize,ctx.sampleRate);
+        const data=buf.getChannelData(0);
+        for(let i=0;i<bufSize;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/bufSize,4);
+        const src=ctx.createBufferSource(); src.buffer=buf;
+        const hpf=ctx.createBiquadFilter(); hpf.type="highpass"; hpf.frequency.value=7000;
+        const gain=ctx.createGain(); gain.gain.setValueAtTime(0.5,ctx.currentTime);
+        src.connect(hpf); hpf.connect(gain); gain.connect(ctx.destination);
+        src.start(ctx.currentTime+time);
+    }
+
+    // ── Canvas roundRect ──────────────────────────────────────────────────────────
+    function roundRect(ctx,x,y,w,h,r){
+        ctx.beginPath();
+        ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+        ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r);
+        ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
+        ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r);
+        ctx.arcTo(x,y,x+r,y+r,r); ctx.closePath();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // COMPONENT
+    // ═══════════════════════════════════════════════════════════════════════════════
+    function DrumHero(){
+        const [phase,setPhase]         = useState("upload");
+        const [songName,setSongName]   = useState("");
+        const [allEvents,setAllEvents] = useState([]);
+        const [events,setEvents]       = useState([]);
+        const [instrInfo,setInstrInfo] = useState(null);
+        const [activeMode,setActiveMode]= useState("drums");
+        const [score,setScore]         = useState(0);
+        const [combo,setCombo]         = useState(0);
+        const [maxCombo,setMaxCombo]   = useState(0);
+        const [stats,setStats]         = useState({perfect:0,good:0,miss:0});
+        const [feedback,setFeedback]   = useState(null);
+        const [activePads,setActivePads]=useState([false,false,false,false]);
+        const [progress,setProgress]   = useState(0);
+        const [analyzeProgress,setAnalyzeProgress]=useState(0);
+        const [analyzeLabel,setAnalyzeLabel]=useState("");
+        const [countdown,setCountdown] = useState(null);
+
+        const canvasRef      = useRef(null);
+        const audioCtxRef    = useRef(null);
+        const sourceRef      = useRef(null);
+        const audioBufferRef = useRef(null);
+        const startTimeRef   = useRef(null);
+        const eventsRef      = useRef([]);
+        const tileStateRef   = useRef([]);
+        const animFrameRef   = useRef(null);
+        const scoreRef       = useRef(0);
+        const comboRef       = useRef(0);
+        const maxComboRef    = useRef(0);
+        const statsRef       = useRef({perfect:0,good:0,miss:0});
+        const feedbackTimerRef=useRef(null);
+        const fileInputRef   = useRef(null);
+        const isPlayingRef   = useRef(false);
+        const diffRef        = useRef(null);
+        const activeModeRef  = useRef("drums");
+
+        useEffect(()=>{ eventsRef.current=events; },[events]);
+        useEffect(()=>{ activeModeRef.current=activeMode; },[activeMode]);
+
+        const currentLanes = () => MODES[activeModeRef.current].lanes;
+
+        const showFeedback=useCallback((text,color)=>{
+            const id=Date.now();
+            setFeedback({text,color,id});
+            if(feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+            feedbackTimerRef.current=setTimeout(()=>setFeedback(null),500);
+        },[]);
+
+        // ── File load ──────────────────────────────────────────────────────────────
+        const handleFile=async(file)=>{
+            if(!file) return;
+            setSongName(file.name.replace(/\.[^.]+$/,""));
+            setPhase("analyzing"); setAnalyzeProgress(0);
+            const ab=await file.arrayBuffer();
+            const ctx=new AudioContext();
+            audioCtxRef.current=ctx;
+            try{
+                const decoded=await ctx.decodeAudioData(ab);
+                audioBufferRef.current=decoded;
+
+                setAnalyzeLabel("ОПРЕДЕЛЯЮ ИНСТРУМЕНТ...");
+                const { type, confidence }=await classifyInstrument(decoded);
+                setInstrInfo({ type, confidence });
+
+                setAnalyzeLabel("АНАЛИЗИРУЮ НОТЫ...");
+                const modeCfg=MODES[type];
+                const { events: beats }=await detectOnsets(decoded, modeCfg, p=>{
+                    setAnalyzeProgress(p);
+                    if(p<30) setAnalyzeLabel("FFT АНАЛИЗ...");
+                    else if(p<70) setAnalyzeLabel("ПОИСК ОНСЕТОВ...");
+                    else setAnalyzeLabel("СБОРКА КАРТЫ...");
+                });
+
+                setAnalyzeProgress(100);
+                setAllEvents(beats);
+                setActiveMode(type);
+                activeModeRef.current=type;
+                setTimeout(()=>setPhase("instrument"),400);
+            }catch(e){
+                console.error(e);
+                setPhase("upload");
+                alert("Не удалось декодировать аудио. Попробуй другой файл.");
+            }
+        };
+
+        // ── Mode switch (user override) ────────────────────────────────────────────
+        const switchMode=async(newType)=>{
+            if(newType===activeMode) { setPhase("difficulty"); return; }
+            setPhase("analyzing"); setAnalyzeProgress(0); setAnalyzeLabel("ПЕРЕСТРАИВАЮ КАРТУ...");
+            const modeCfg=MODES[newType];
+            const { events: beats }=await detectOnsets(audioBufferRef.current, modeCfg, p=>{
+                setAnalyzeProgress(p);
+            });
+            setAllEvents(beats);
+            setActiveMode(newType);
+            activeModeRef.current=newType;
+            setAnalyzeProgress(100);
+            setTimeout(()=>setPhase("difficulty"),300);
+        };
+
+        // ── Difficulty ─────────────────────────────────────────────────────────────
+        const chooseDifficulty=(diff)=>{
+            diffRef.current=diff;
+            const filtered=filterByDifficulty(allEvents,diff.keep);
+            setEvents(filtered);
+            tileStateRef.current=filtered.map(()=>"pending");
+            startCountdown();
+        };
+
+        // ── Countdown ──────────────────────────────────────────────────────────────
+        const startCountdown=()=>{
+            setPhase("countdown");
+            const ctx=audioCtxRef.current;
+            [0.3,1.3,2.3].forEach(t=>playClick(ctx,t));
+            setCountdown(3);
+            setTimeout(()=>setCountdown(2),1000);
+            setTimeout(()=>setCountdown(1),2000);
+            setTimeout(()=>setCountdown("GO!"),3000);
+            setTimeout(()=>setPhase("game"),3600);
+        };
+
+        // ── Audio start ────────────────────────────────────────────────────────────
+        const startAudio=useCallback(()=>{
+            if(!audioBufferRef.current||!audioCtxRef.current) return;
+            scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
+            statsRef.current={perfect:0,good:0,miss:0};
+            setScore(0); setCombo(0); setMaxCombo(0); setStats({perfect:0,good:0,miss:0});
+            tileStateRef.current=eventsRef.current.map(()=>"pending");
+            isPlayingRef.current=true;
+            const src=audioCtxRef.current.createBufferSource();
+            src.buffer=audioBufferRef.current;
+            src.connect(audioCtxRef.current.destination);
+            sourceRef.current=src;
+            startTimeRef.current=audioCtxRef.current.currentTime;
+            src.start(0);
+            src.onended=()=>{ if(isPlayingRef.current){ isPlayingRef.current=false; setTimeout(()=>setPhase("result"),500); } };
+        },[]);
+
+        useEffect(()=>{ if(phase==="game") setTimeout(()=>startAudio(),100); },[phase,startAudio]);
+
+        // ── Canvas render (with tile stroke) ──────────────────────────────────────
+        useEffect(()=>{
+            if(phase!=="game") return;
+            const canvas=canvasRef.current; if(!canvas) return;
+            const ctx=canvas.getContext("2d");
+            const W=canvas.width, H=canvas.height, laneW=W/4;
+            const hitLineY=H*(HIT_ZONE_Y/100);
+            const lanes=MODES[activeModeRef.current].lanes;
+
+            const draw=()=>{
+                const now=(audioCtxRef.current&&startTimeRef.current!=null)
+                    ?audioCtxRef.current.currentTime-startTimeRef.current:0;
+                setProgress((now/(audioBufferRef.current?.duration||1))*100);
+
+                ctx.fillStyle="#0d0d14"; ctx.fillRect(0,0,W,H);
+                for(let i=1;i<4;i++){
+                    ctx.strokeStyle="#1a1a2e"; ctx.lineWidth=1;
+                    ctx.beginPath(); ctx.moveTo(i*laneW,0); ctx.lineTo(i*laneW,H); ctx.stroke();
+                }
+
+                eventsRef.current.forEach((ev,i)=>{
+                    const state=tileStateRef.current[i];
+                    if(state==="hit") return;
+                    const y=hitLineY-(ev.time-now)*TILE_SPEED;
+                    if(y<-TILE_HEIGHT-10||y>H+10) return;
+
+                    if(y>hitLineY+TILE_HEIGHT*2&&state==="pending"){
+                        tileStateRef.current[i]="miss";
+                        comboRef.current=0; setCombo(0);
+                        statsRef.current.miss++; setStats({...statsRef.current});
+                    }
+
+                    const x=ev.lane*laneW, color=lanes[ev.lane]?.color||"#ffffff";
+                    ctx.globalAlpha=state==="miss"?0.18:1;
+                    if(state==="pending"){
+                        const grd=ctx.createRadialGradient(x+laneW/2,y+TILE_HEIGHT/2,2,x+laneW/2,y+TILE_HEIGHT/2,laneW*0.8);
+                        grd.addColorStop(0,color+"44"); grd.addColorStop(1,"transparent");
+                        ctx.fillStyle=grd; ctx.fillRect(x-10,y-10,laneW+20,TILE_HEIGHT+20);
+                    }
+                    ctx.fillStyle=color;
+                    roundRect(ctx,x+4,y,laneW-8,TILE_HEIGHT,6);
+                    ctx.fill();
+                    // ═══ ADDED VISIBLE STROKE ═══
+                    ctx.strokeStyle = "#ffffffcc";
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    // inner highlight
+                    ctx.fillStyle="rgba(255,255,255,0.2)";
+                    roundRect(ctx,x+4,y,laneW-8,TILE_HEIGHT/3,6);
+                    ctx.fill();
+                    ctx.globalAlpha=1;
+                });
+
+                const modeColor=MODES[activeModeRef.current].color;
+                ctx.strokeStyle=modeColor+"66"; ctx.lineWidth=2;
+                ctx.shadowColor=modeColor; ctx.shadowBlur=12;
+                ctx.beginPath(); ctx.moveTo(0,hitLineY); ctx.lineTo(W,hitLineY); ctx.stroke();
+                ctx.shadowBlur=0;
+
+                animFrameRef.current=requestAnimationFrame(draw);
+            };
+            animFrameRef.current=requestAnimationFrame(draw);
+            return()=>{ if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
+        },[phase]);
+
+        // ── Hit handler ────────────────────────────────────────────────────────────
+        const handleHit=useCallback((li)=>{
+            setActivePads(prev=>{ const n=[...prev]; n[li]=true; return n; });
+            setTimeout(()=>setActivePads(prev=>{ const n=[...prev]; n[li]=false; return n; }),100);
+            if(!isPlayingRef.current||!audioCtxRef.current) return;
+            const now=audioCtxRef.current.currentTime-startTimeRef.current;
+            const diff=diffRef.current;
+            let best=null,bestDist=Infinity;
+            eventsRef.current.forEach((ev,i)=>{
+                if(ev.lane!==li||tileStateRef.current[i]!=="pending") return;
+                const d=Math.abs(ev.time-now)*1000;
+                if(d<bestDist){ bestDist=d; best=i; }
+            });
+            if(best!==null&&bestDist<=diff.goodMs){
+                tileStateRef.current[best]="hit";
+                comboRef.current++;
+                if(comboRef.current>maxComboRef.current){ maxComboRef.current=comboRef.current; setMaxCombo(maxComboRef.current); }
+                setCombo(comboRef.current);
+                const mult=Math.min(Math.floor(comboRef.current/5)+1,4);
+                if(bestDist<=diff.hitMs){
+                    scoreRef.current+=100*mult; setScore(scoreRef.current);
+                    statsRef.current.perfect++; setStats({...statsRef.current});
+                    showFeedback("PERFECT","#76ff03");
+                } else {
+                    scoreRef.current+=50*mult; setScore(scoreRef.current);
+                    statsRef.current.good++; setStats({...statsRef.current});
+                    showFeedback("GOOD","#00e5ff");
+                }
+            } else {
+                comboRef.current=0; setCombo(0);
+                showFeedback("MISS","#ff1744");
+            }
+        },[showFeedback]);
+
+        // ── Keyboard (uses e.code to support any layout) ──────────────────────────
+        useEffect(()=>{
+            if(phase!=="game") return;
+            const codeMap = { 'KeyF':0, 'KeyG':1, 'KeyH':2, 'KeyJ':3 };
+            const onKey=(e)=>{
+                const li = codeMap[e.code];
+                if(li === undefined) return;
+                e.preventDefault();
+                handleHit(li);
+            };
+            window.addEventListener("keydown",onKey);
+            return()=>window.removeEventListener("keydown",onKey);
+        },[phase,handleHit]);
+
+        const stopGame=useCallback(()=>{
+            isPlayingRef.current=false;
+            try{ sourceRef.current?.stop(); }catch{}
+            if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+            setPhase("result");
+        },[]);
+        const playAgain=useCallback(()=>{
+            try{ sourceRef.current?.stop(); }catch{}
+            isPlayingRef.current=false;
+            if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+            startCountdown();
+        },[]);
+        const backToDifficulty=useCallback(()=>{
+            try{ sourceRef.current?.stop(); }catch{}
+            isPlayingRef.current=false;
+            if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+            setPhase("difficulty");
+        },[]);
+
+        const totalHits=stats.perfect+stats.good, totalNotes=events.length;
+        const accuracy=totalNotes>0?Math.round((totalHits/totalNotes)*100):0;
+
+        // ── Styles ─────────────────────────────────────────────────────────────────
+        const C={
+            root:{ minHeight:"100vh",background:"#0a0a0f",display:"flex",flexDirection:"column",
+                alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",
+                color:"#e0e0e0",userSelect:"none",padding:"20px 0" },
+            title:{ fontSize:36,fontWeight:900,letterSpacing:8,textTransform:"uppercase",color:"#fff",
+                textShadow:"0 0 30px #ff1744,0 0 60px #ff174455",marginBottom:4 },
+            sub:{ fontSize:11,letterSpacing:4,color:"#333",marginBottom:32,textTransform:"uppercase" },
+            btn:{ padding:"8px 20px",background:"transparent",border:"1px solid #333",borderRadius:6,
+                color:"#aaa",fontSize:12,letterSpacing:2,textTransform:"uppercase",fontFamily:"'Courier New',monospace" },
+            scoreLbl:{ fontSize:10,letterSpacing:3,color:"#444",textTransform:"uppercase",marginBottom:2 },
+            progBar:{ width:320,height:2,background:"#1a1a2e",borderRadius:2,marginBottom:16 },
+        };
+
+        const modeMeta=MODES[activeMode];
+        const lanes=modeMeta.lanes;
+
+        // ── Render ──────────────────────────────────────────────────────────────────
+        return (
+            <div style={C.root}>
+                <div style={C.title}>DRUM HERO</div>
+                <div style={C.sub}>beat your rhythm</div>
+
+                {/* UPLOAD */}
+                {phase==="upload"&&(
+                    <div onClick={()=>fileInputRef.current?.click()}
+                         onDragOver={e=>e.preventDefault()}
+                         onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0]);}}
+                         style={{border:"2px dashed #2a2a2a",borderRadius:12,padding:"40px 60px",
+                             textAlign:"center",cursor:"pointer",background:"#111118"}}>
+                        <div style={{fontSize:52,marginBottom:12}}>🥁</div>
+                        <div style={{color:"#ccc",fontSize:16,marginBottom:8,fontWeight:700,letterSpacing:2}}>ЗАГРУЗИ ТРЕК</div>
+                        <div style={{color:"#444",fontSize:12,letterSpacing:2}}>MP3 / WAV / OGG · drag & drop или клик</div>
+                        <input ref={fileInputRef} type="file" accept="audio/*" style={{display:"none"}}
+                               onChange={e=>handleFile(e.target.files[0])}/>
+                    </div>
+                )}
+
+                {/* ANALYZING */}
+                {phase==="analyzing"&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+                        <div style={{fontSize:13,letterSpacing:4,color:"#555"}}>{analyzeLabel||"АНАЛИЗИРУЮ..."}</div>
+                        <div style={{display:"flex",gap:8}}>
+                            {[1,2,3].map(n=><div key={n} className={`dot${n}`} style={{width:10,height:10,borderRadius:"50%",background:"#ff1744"}}/>)}
+                        </div>
+                        <div style={{width:280,height:2,background:"#1a1a2e",borderRadius:2}}>
+                            <div style={{width:`${analyzeProgress}%`,height:"100%",background:"#ff1744",borderRadius:2,transition:"width 0.3s"}}/>
+                        </div>
+                        <div style={{fontSize:32,fontWeight:900,color:"#ff1744"}}>{analyzeProgress}%</div>
+                    </div>
+                )}
+
+                {/* INSTRUMENT DETECTION SCREEN */}
+                {phase==="instrument"&&instrInfo&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20,
+                        animation:"instrReveal 0.4s ease-out forwards",maxWidth:340,textAlign:"center"}}>
+                        <div style={{fontSize:11,letterSpacing:4,color:"#444",textTransform:"uppercase"}}>определён инструмент</div>
+                        <div style={{fontSize:11,color:"#2a2a2a",letterSpacing:2,marginTop:-12}}>{songName}</div>
+                        <div style={{border:`1px solid ${MODES[instrInfo.type].color}33`,borderRadius:16,
+                            padding:"24px 32px",background:`${MODES[instrInfo.type].color}08`,
+                            display:"flex",flexDirection:"column",alignItems:"center",gap:10,width:300,
+                            boxShadow:`0 0 40px ${MODES[instrInfo.type].color}11`,animation:"instrPing 0.6s ease-out 0.2s 1"}}>
+                            <div style={{fontSize:52}}>{MODES[instrInfo.type].emoji}</div>
+                            <div style={{fontSize:18,fontWeight:900,color:MODES[instrInfo.type].color,letterSpacing:4,textTransform:"uppercase"}}>
+                                {MODES[instrInfo.type].label}
+                            </div>
+                            <div style={{width:"100%",marginTop:4}}>
+                                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                                    <div style={{fontSize:9,letterSpacing:2,color:"#333",textTransform:"uppercase"}}>уверенность</div>
+                                    <div style={{fontSize:9,color:MODES[instrInfo.type].color}}>{Math.min(instrInfo.confidence,99)}%</div>
+                                </div>
+                                <div style={{height:2,background:"#1a1a2e",borderRadius:2}}>
+                                    <div style={{height:"100%",width:`${Math.min(instrInfo.confidence,99)}%`,
+                                        background:MODES[instrInfo.type].color,borderRadius:2,transition:"width 0.8s ease-out"}}/>
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{width:300,border:"1px solid #1a1a2e",borderRadius:12,padding:"14px 16px",textAlign:"left"}}>
+                            <div style={{fontSize:9,letterSpacing:3,color:"#333",textTransform:"uppercase",marginBottom:10}}>
+                                выбор режима
+                            </div>
+                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                                {Object.entries(MODES).map(([key,m])=>{
+                                    const isSel=key===instrInfo.type;
+                                    return(
+                                        <button key={key}
+                                                onClick={()=>{ setInstrInfo({...instrInfo,type:key}); }}
+                                                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+                                                    background:isSel?`${m.color}18`:"transparent",
+                                                    border:`1px solid ${isSel?m.color+"66":"#222"}`,
+                                                    borderRadius:8,color:isSel?m.color:"#555",fontSize:12,letterSpacing:2,
+                                                    textTransform:"uppercase",textAlign:"left",transition:"all 0.15s"}}>
+                                            <span style={{fontSize:20}}>{m.emoji}</span>
+                                            <div>
+                                                <div style={{fontWeight:700,fontSize:11}}>{m.label}</div>
+                                                <div style={{fontSize:9,opacity:0.5,letterSpacing:1,marginTop:2}}>
+                                                    {m.lanes.map(l=>l.name).join(" · ")}
+                                                </div>
+                                            </div>
+                                            {isSel&&<div style={{marginLeft:"auto",fontSize:10,color:m.color}}>✓ авто</div>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <button
+                            onClick={()=>switchMode(instrInfo.type)}
+                            style={{padding:"14px 40px",background:"transparent",
+                                border:`1px solid ${MODES[instrInfo.type].color}66`,borderRadius:8,
+                                color:MODES[instrInfo.type].color,fontSize:13,fontWeight:700,
+                                letterSpacing:4,textTransform:"uppercase",marginTop:4}}>
+                            ВЫБРАТЬ СЛОЖНОСТЬ →
+                        </button>
+                        <button style={{...C.btn,fontSize:10}} onClick={()=>setPhase("upload")}>← другой трек</button>
+                    </div>
+                )}
+
+                {/* DIFFICULTY */}
+                {phase==="difficulty"&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:24}}>
+                        <div style={{fontSize:12,letterSpacing:5,color:"#444",textTransform:"uppercase"}}>выбери сложность</div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-12}}>
+                            <span style={{fontSize:16}}>{modeMeta.emoji}</span>
+                            <span style={{fontSize:10,color:modeMeta.color,letterSpacing:2,textTransform:"uppercase"}}>
+                                {modeMeta.label}
+                            </span>
+                        </div>
+                        <div style={{display:"flex",flexDirection:"column",gap:12,width:280}}>
+                            {DIFFICULTIES.map(diff=>(
+                                <button key={diff.id} onClick={()=>chooseDifficulty(diff)}
+                                        style={{padding:"16px 24px",background:"transparent",border:`1px solid ${diff.color}44`,
+                                            borderRadius:8,color:diff.color,fontSize:14,fontWeight:700,letterSpacing:4,
+                                            textTransform:"uppercase",display:"flex",justifyContent:"space-between",alignItems:"center",
+                                            transition:"background 0.15s"}}
+                                        onMouseEnter={e=>e.currentTarget.style.background=diff.color+"11"}
+                                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                    <span>{diff.label}</span>
+                                    <span style={{fontSize:10,color:diff.color+"88",letterSpacing:2}}>{diff.desc}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <button style={{...C.btn,marginTop:8,fontSize:10}} onClick={()=>setPhase("instrument")}>← назад</button>
+                    </div>
+                )}
+
+                {/* COUNTDOWN */}
+                {phase==="countdown"&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:24}}>
+                        <div style={{fontSize:11,color:"#333",letterSpacing:3,textTransform:"uppercase"}}>{songName}</div>
+                        <div key={countdown} style={{
+                            fontSize:countdown==="GO!"?72:96,fontWeight:900,
+                            color:countdown==="GO!"?"#76ff03":"#fff",
+                            textShadow:countdown==="GO!"?"0 0 40px #76ff03,0 0 80px #76ff0388":"0 0 40px #ff1744,0 0 80px #ff174455",
+                            letterSpacing:countdown==="GO!"?8:0,
+                            animation:"countPop 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards",
+                            minWidth:160,textAlign:"center"}}>
+                            {countdown}
+                        </div>
+                        <div style={{fontSize:10,color:"#2a2a2a",letterSpacing:4,textTransform:"uppercase"}}>
+                            {diffRef.current?.label} · {modeMeta.label}
+                        </div>
+                    </div>
+                )}
+
+                {/* GAME */}
+                {phase==="game"&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                        <div style={{display:"flex",gap:48,marginBottom:16,alignItems:"flex-end"}}>
+                            <div style={{textAlign:"center"}}>
+                                <div style={C.scoreLbl}>SCORE</div>
+                                <div style={{fontSize:36,fontWeight:900,color:"#fff",lineHeight:1}}>{score.toLocaleString()}</div>
+                            </div>
+                            <div style={{textAlign:"center"}}>
+                                <div style={C.scoreLbl}>COMBO</div>
+                                <div style={{fontSize:44,fontWeight:900,lineHeight:1,color:combo>0?"#ff9100":"#1e1e1e"}}>
+                                    {combo>0?`×${combo}`:"—"}
+                                </div>
+                            </div>
+                            <div style={{textAlign:"center"}}>
+                                <div style={C.scoreLbl}>NOTES</div>
+                                <div style={{fontSize:22,fontWeight:700,color:"#333",lineHeight:1}}>{totalHits}/{totalNotes}</div>
+                            </div>
+                        </div>
+                        <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:8}}>
+                            <div style={{fontSize:9,letterSpacing:2,color:diffRef.current?.color+"88",textTransform:"uppercase",
+                                border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"2px 8px"}}>
+                                {diffRef.current?.label}
+                            </div>
+                            <div style={{fontSize:9,letterSpacing:2,color:modeMeta.color+"77",textTransform:"uppercase",
+                                border:`1px solid ${modeMeta.color}22`,borderRadius:4,padding:"2px 8px"}}>
+                                {modeMeta.emoji} {modeMeta.label}
+                            </div>
+                        </div>
+                        <div style={C.progBar}>
+                            <div style={{width:`${progress}%`,height:"100%",background:modeMeta.color,borderRadius:2,transition:"width 0.5s"}}/>
+                        </div>
+                        <div style={{position:"relative",width:320,height:CANVAS_H,background:"#0d0d14",
+                            border:"1px solid #1a1a2e",borderRadius:8,overflow:"hidden"}}>
+                            <canvas ref={canvasRef} width={320} height={CANVAS_H} style={{display:"block"}}/>
+                            <div style={{position:"absolute",left:0,right:0,bottom:0,height:72,display:"flex"}}>
+                                {lanes.map((lane,i)=>(
+                                    <div key={lane.key} className="touch-pad"
+                                         onPointerDown={e=>{e.preventDefault();handleHit(i);}}
+                                         style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
+                                             justifyContent:"center",gap:2,
+                                             border:"1px solid #1a1a1a",borderBottom:"none",borderRadius:"4px 4px 0 0",
+                                             color:activePads[i]?"#fff":lane.color+"77",
+                                             background:activePads[i]?lane.color+"2a":"transparent",
+                                             boxShadow:activePads[i]?`inset 0 0 24px ${lane.color}33`:"none",
+                                             cursor:"pointer",touchAction:"none"}}>
+                                        <div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{lane.label}</div>
+                                        <div style={{fontSize:7,letterSpacing:1,opacity:0.5,textTransform:"uppercase"}}>{lane.name}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            {feedback&&(
+                                <div key={feedback.id} style={{
+                                    position:"absolute",left:0,right:0,top:"36%",
+                                    display:"flex",justifyContent:"center",
+                                    fontSize:20,fontWeight:900,letterSpacing:5,textTransform:"uppercase",
+                                    color:feedback.color,textShadow:`0 0 24px ${feedback.color}`,
+                                    animation:"fadeUp 0.5s ease-out forwards",pointerEvents:"none"}}>
+                                    {feedback.text}
+                                </div>
+                            )}
+                        </div>
+                        <div style={{display:"flex",width:320,marginTop:4}}>
+                            {lanes.map(lane=>(
+                                <div key={lane.key} style={{flex:1,textAlign:"center",fontSize:9,letterSpacing:1,
+                                    color:lane.color+"55",textTransform:"uppercase"}}>{lane.name}</div>
+                            ))}
+                        </div>
+                        <div style={{display:"flex",gap:12,marginTop:14,flexWrap:"wrap",justifyContent:"center"}}>
+                            <button style={C.btn} onClick={playAgain}>↺ RESTART</button>
+                            <button style={C.btn} onClick={backToDifficulty}>☰ СЛОЖНОСТЬ</button>
+                            <button style={C.btn} onClick={stopGame}>■ СТОП</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* RESULT */}
+                {phase==="result"&&(
+                    <div style={{textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:20}}>
+                        <div style={{fontSize:12,letterSpacing:6,color:"#333",textTransform:"uppercase"}}>результат</div>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                            <div style={{fontSize:9,letterSpacing:2,color:diffRef.current?.color+"88",textTransform:"uppercase",
+                                border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"3px 12px"}}>
+                                {diffRef.current?.label}
+                            </div>
+                            <div style={{fontSize:9,letterSpacing:2,color:modeMeta.color+"88",textTransform:"uppercase",
+                                border:`1px solid ${modeMeta.color}33`,borderRadius:4,padding:"3px 12px"}}>
+                                {modeMeta.emoji} {modeMeta.label}
+                            </div>
+                        </div>
+                        <div style={{fontSize:64,fontWeight:900,color:"#fff",
+                            textShadow:"0 0 40px #ff1744,0 0 80px #ff174433",lineHeight:1}}>
+                            {score.toLocaleString()}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 48px"}}>
+                            {[["ACCURACY",accuracy+"%"],["MAX COMBO","×"+maxCombo],
+                                ["PERFECT",stats.perfect],["GOOD",stats.good],["MISS",stats.miss],["NOTES",totalNotes]]
+                                .map(([label,val])=>(
+                                    <div key={label} style={{textAlign:"center"}}>
+                                        <div style={{fontSize:9,letterSpacing:3,color:"#333",textTransform:"uppercase"}}>{label}</div>
+                                        <div style={{fontSize:24,fontWeight:700,color:"#bbb"}}>{val}</div>
+                                    </div>
+                                ))}
+                        </div>
+                        <div style={{display:"flex",gap:12,marginTop:8,flexWrap:"wrap",justifyContent:"center"}}>
+                            <button style={{...C.btn,borderColor:"#ff174466",color:"#ff1744"}} onClick={playAgain}>↺ ЕЩЁ РАЗ</button>
+                            <button style={C.btn} onClick={backToDifficulty}>☰ СЛОЖНОСТЬ</button>
+                            <button style={C.btn} onClick={()=>{
+                                setPhase("upload");setSongName("");setAllEvents([]);setEvents([]);setInstrInfo(null);
+                            }}>♪ ДРУГОЙ ТРЕК</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<DrumHero />);
+</script>
+</body>
+</html>
