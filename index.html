@@ -5,535 +5,1018 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>DRUM HERO</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js">
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js">
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js">
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{background:#0a0a0f;overflow-x:hidden;touch-action:manipulation;-webkit-text-size-adjust:100%}
-@keyframes fadeUp{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-32px)}}
-@keyframes pop{0%{opacity:0;transform:scale(0.4)}50%{transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
-@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
-@keyframes spin{to{transform:rotate(360deg)}}
-.d1{animation:pulse 1s infinite 0s}.d2{animation:pulse 1s infinite .2s}.d3{animation:pulse 1s infinite .4s}
-button{cursor:pointer;font-family:'Courier New',monospace;-webkit-appearance:none}
-input[type=range]{-webkit-appearance:none;height:3px;border-radius:2px;outline:none;cursor:pointer;width:100%}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#ff1744}
-input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#ff1744;border:none}
-::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Unbounded', cursive, sans-serif;
+}
+body {
+  background: #000000;
+  overflow-x: hidden;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  color: #ffffff;
+}
+@keyframes fadeUp {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-32px); }
+}
+@keyframes pop {
+  0% { opacity: 0; transform: scale(0.4); }
+  50% { transform: scale(1.1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: .3; }
+  50% { opacity: 1; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@keyframes hpFlash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .3; }
+}
+.d1 { animation: pulse 1s infinite 0s; }
+.d2 { animation: pulse 1s infinite .2s; }
+.d3 { animation: pulse 1s infinite .4s; }
+button {
+  cursor: pointer;
+  font-family: 'Unbounded', cursive, sans-serif;
+  -webkit-appearance: none;
+  border: 1px solid #ff1744;
+  background: transparent;
+  color: #ff1744;
+  text-shadow: 0 0 5px rgba(255, 23, 68, 0.5);
+  letter-spacing: 2px;
+}
+button:hover {
+  background: rgba(255, 23, 68, 0.1);
+  transform: scale(1.05);
+}
+input[type=range] {
+  -webkit-appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  background: #1a1a1a;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ff1744;
+  border: 2px solid #000;
+  box-shadow: 0 0 3px rgba(0,0,0,0.5);
+}
+input[type=range]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ff1744;
+  border: 2px solid #000;
+  box-shadow: 0 0 3px rgba(0,0,0,0.5);
+}
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: #ff1744; border-radius: 2px; }
+::-webkit-scrollbar-track { background: #000000; }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useRef,useCallback} = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
-// ── Config ──────────────────────────────────────────────────────
-const MODES = {
-  drums: {
-    label:"Барабаны",emoji:"🥁",color:"#ff1744",eqMode:"drums",
-    lanes:[{k:"f",l:"F",n:"Kick",c:"#ff1744"},{k:"g",l:"G",n:"Snare",c:"#ff9100"},{k:"h",l:"H",n:"Hi-Hat",c:"#76ff03"},{k:"j",l:"J",n:"Cymbal",c:"#00e5ff"}],
-    bands:[[60,150],[200,500],[6000,18000],[150,400]],thr:1.5,dthr:1.3,min:0.008,dup:0.06,
+// ── Constants ────────────────────────────────────────────────────
+const LANES_DEF = [
+  { id: 0, label: "Kick",  color: "#ff1744", defKey: "f", defCode: "KeyF" },
+  { id: 1, label: "Snare", color: "#ff1744", defKey: "g", defCode: "KeyG" },
+  { id: 2, label: "Hi-Hat", color: "#ff1744", defKey: "h", defCode: "KeyH" },
+  { id: 3, label: "Cymbal", color: "#ff1744", defKey: "j", defCode: "KeyJ" },
+];
+
+const DIFFS = {
+  easy: {
+    label: "EASY",
+    color: "#ffffff",
+    keep: 1/3,
+    hitMs: 400,
+    goodMs: 600,
+    desc: "каждая 3-я нота",
+    lives: 5,
+    healThreshold: 10,
+    maxSimultaneous: 1,
+    fillGrid: null,
+    fillProb: 0,
   },
-  melody: {
-    label:"Мелодия",emoji:"🎸",color:"#aa00ff",eqMode:"generic",
-    lanes:[{k:"f",l:"F",n:"Низ",c:"#ff1744"},{k:"g",l:"G",n:"Низ-Ср",c:"#ff9100"},{k:"h",l:"H",n:"Вер-Ср",c:"#76ff03"},{k:"j",l:"J",n:"Высок",c:"#00e5ff"}],
-    bands:[[80,300],[300,800],[800,2500],[2500,8000]],thr:1.2,dthr:1.08,min:0.003,dup:0.04,
+  medium: {
+    label: "MEDIUM",
+    color: "#ff1744",
+    keep: 1,
+    hitMs: 220,
+    goodMs: 350,
+    desc: "все ноты + 20% восьмых",
+    lives: 5,
+    healThreshold: 15,
+    maxSimultaneous: 2,
+    fillGrid: 8,
+    fillProb: 0.2,
   },
-  vocals: {
-    label:"Вокал",emoji:"🎤",color:"#00e5ff",eqMode:"generic",
-    lanes:[{k:"f",l:"F",n:"Низ",c:"#ff1744"},{k:"g",l:"G",n:"Низ-Ср",c:"#ff9100"},{k:"h",l:"H",n:"Вер-Ср",c:"#76ff03"},{k:"j",l:"J",n:"Высок",c:"#00e5ff"}],
-    bands:[[200,500],[500,1200],[1200,3500],[3500,12000]],thr:1.15,dthr:1.05,min:0.002,dup:0.04,
+  hard: {
+    label: "HARD",
+    color: "#8b0000",
+    keep: 1,
+    hitMs: 160,
+    goodMs: 260,
+    desc: "все ноты + 70% 16-х",
+    lives: 5,
+    healThreshold: 25,
+    maxSimultaneous: 3,
+    fillGrid: 16,
+    fillProb: 0.7,
   },
 };
-const DIFFS=[
-  {id:"easy",  label:"EASY",  keep:1/3,hitMs:400,goodMs:600,color:"#76ff03",desc:"каждая 3-я нота"},
-  {id:"medium",label:"MEDIUM",keep:1/2,hitMs:220,goodMs:350,color:"#ff9100",desc:"каждая 2-я нота"},
-  {id:"hard",  label:"HARD",  keep:1,  hitMs:160,goodMs:260,color:"#ff1744",desc:"все ноты"},
-];
-const TH=28,HZY=82,SPD=220,CH=520,DLY=3.0;
+
+const isMobile = () => /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 600;
+
+const TH = 28, HZY = 82, SPD = 220, CH = 520, DLY = 3.0;
+const DRUMS_CFG = {
+  bands: [[60, 150], [200, 500], [6000, 18000], [150, 400]],
+  thr: 1.5, dthr: 1.3, min: 0.008, dup: 0.06,
+};
+
+// ── Seeded RNG ──────────────────────────────────────
+function hashCode(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h) + str.charCodeAt(i) | 0;
+  }
+  return h;
+}
+function makeSeededRandom(seed) {
+  return () => {
+    // xorshift32 algorithm
+    seed = (seed ^ (seed << 13)) >>> 0;
+    seed = (seed ^ (seed >> 17)) >>> 0;
+    seed = (seed ^ (seed << 5)) >>> 0;
+    return (seed >>> 0) / 0xffffffff;
+  };
+}
 
 // ── IndexedDB ────────────────────────────────────────────────────
-const DB={name:"DrumHero7",ver:1,store:"tracks"};
-function openDB(){
-  return new Promise((res,rej)=>{
-    const r=indexedDB.open(DB.name,DB.ver);
-    r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(DB.store)) d.createObjectStore(DB.store,{keyPath:"hash"});};
-    r.onsuccess=e=>res(e.target.result);r.onerror=e=>rej(e.target.error);
+const DB = { name: "DrumHero9", ver: 1, store: "tracks" };
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB.name, DB.ver);
+    r.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains(DB.store)) d.createObjectStore(DB.store, { keyPath: "hash" });
+    };
+    r.onsuccess = e => res(e.target.result);
+    r.onerror = e => rej(e.target.error);
   });
 }
-const dbOp=(mode,fn)=>openDB().then(db=>new Promise((res,rej)=>{const tx=db.transaction(DB.store,mode);fn(tx.objectStore(DB.store),res,rej);}));
-const dbGet=h=>dbOp("readonly",(s,r,j)=>{const q=s.get(h);q.onsuccess=e=>r(e.target.result||null);q.onerror=j;});
-const dbPut=rec=>dbOp("readwrite",(s,r,j)=>{const q=s.put(rec);q.onsuccess=()=>r();q.onerror=j;});
-const dbAll=()=>dbOp("readonly",(s,r,j)=>{const q=s.getAll();q.onsuccess=e=>r(e.target.result||[]);q.onerror=j;});
-const dbDel=h=>dbOp("readwrite",(s,r,j)=>{const q=s.delete(h);q.onsuccess=()=>r();q.onerror=j;});
+const dbOp = (m, fn) => openDB().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(DB.store, m);
+  fn(tx.objectStore(DB.store), res, rej);
+}));
+const dbGet = h => dbOp("readonly", (s, r, j) => { const q = s.get(h); q.onsuccess = e => r(e.target.result || null); q.onerror = j; });
+const dbPut = rec => dbOp("readwrite", (s, r, j) => { const q = s.put(rec); q.onsuccess = () => r(); q.onerror = j; });
+const dbAll = () => dbOp("readonly", (s, r, j) => { const q = s.getAll(); q.onsuccess = e => r(e.target.result || []); q.onerror = j; });
+const dbDel = h => dbOp("readwrite", (s, r, j) => { const q = s.delete(h); q.onsuccess = () => r(); q.onerror = j; });
 
-async function sha256(ab){
-  const b=await crypto.subtle.digest("SHA-256",ab);
-  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+async function sha256(ab) {
+  const b = await crypto.subtle.digest("SHA-256", ab);
+  return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
 // ── FFT ─────────────────────────────────────────────────────────
-function fft(re,im,n){
-  let j=0;
-  for(let i=1;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]];}}
-  for(let l=2;l<=n;l<<=1){const a=(-2*Math.PI)/l,wr=Math.cos(a),wi=Math.sin(a);for(let i=0;i<n;i+=l){let cr=1,ci=0;for(let k=0;k<l/2;k++){const ur=re[i+k],ui=im[i+k],vr=re[i+k+l/2]*cr-im[i+k+l/2]*ci,vi=re[i+k+l/2]*ci+im[i+k+l/2]*cr;re[i+k]=ur+vr;im[i+k]=ui+vi;re[i+k+l/2]=ur-vr;im[i+k+l/2]=ui-vi;const nr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nr;}}}
+function fft(re, im, n) {
+  let j = 0;
+  for (let i = 1; i < n; i++) {
+    let b = n >> 1;
+    for (; j & b; b >>= 1) j ^= b;
+    j ^= b;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let l = 2; l <= n; l <<= 1) {
+    const a = (-2 * Math.PI) / l, wr = Math.cos(a), wi = Math.sin(a);
+    for (let i = 0; i < n; i += l) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < l / 2; k++) {
+        const ur = re[i + k], ui = im[i + k],
+              vr = re[i + k + l / 2] * cr - im[i + k + l / 2] * ci,
+              vi = re[i + k + l / 2] * ci + im[i + k + l / 2] * cr;
+        re[i + k] = ur + vr; im[i + k] = ui + vi;
+        re[i + k + l / 2] = ur - vr; im[i + k + l / 2] = ui - vi;
+        const nr = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = nr;
+      }
+    }
+  }
 }
-function mag(sig,N){
-  const h=N/2,m=new Float32Array(h),re=new Float32Array(sig),im=new Float32Array(N);
-  fft(re,im,N);for(let i=0;i<h;i++)m[i]=Math.sqrt(re[i]*re[i]+im[i]*im[i])/N;return m;
+function magSpec(sig, N) {
+  const h = N / 2, m = new Float32Array(h), re = new Float32Array(sig), im = new Float32Array(N);
+  fft(re, im, N);
+  for (let i = 0; i < h; i++) m[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]) / N;
+  return m;
 }
 
 // ── BPM ─────────────────────────────────────────────────────────
-function getBPM(buf){
-  const sr=buf.sampleRate,n=buf.numberOfChannels,len=Math.min(buf.length,sr*60);
-  const mono=new Float32Array(len);
-  for(let c=0;c<n;c++){const ch=buf.getChannelData(c);for(let i=0;i<len;i++)mono[i]+=ch[i]/n;}
-  const hop=Math.floor(sr*.01),nh=Math.floor(len/hop),env=new Float32Array(nh);
-  for(let h=0;h<nh;h++){let s=0;for(let i=0;i<hop;i++){const v=mono[h*hop+i]||0;s+=v*v;}env[h]=Math.sqrt(s/hop);}
-  const flux=new Float32Array(nh);for(let h=1;h<nh;h++){const d=env[h]-env[h-1];flux[h]=d>0?d:0;}
-  const hd=hop/sr,lmin=Math.floor(60/(200*hd)),lmax=Math.ceil(60/(60*hd));
-  let bl=lmin,bc=-Infinity;
-  for(let l=lmin;l<=lmax;l++){let c=0;const nn=nh-l;for(let i=0;i<nn;i++)c+=flux[i]*flux[i+l];c/=nn;if(c>bc){bc=c;bl=l;}}
-  const bpm=Math.round((60/(bl*hd))*2)/2;
-  return{bpm,beat:60/bpm};
+function getBPM(buf) {
+  const sr = buf.sampleRate, nc = buf.numberOfChannels, len = Math.min(buf.length, sr * 60);
+  const mono = new Float32Array(len);
+  for (let c = 0; c < nc; c++) {
+    const ch = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) mono[i] += ch[i] / nc;
+  }
+  const hop = Math.floor(sr * .01), nh = Math.floor(len / hop), env = new Float32Array(nh);
+  for (let h = 0; h < nh; h++) {
+    let s = 0;
+    for (let i = 0; i < hop; i++) { const v = mono[h * hop + i] || 0; s += v * v; }
+    env[h] = Math.sqrt(s / hop);
+  }
+  const flux = new Float32Array(nh);
+  for (let h = 1; h < nh; h++) { const d = env[h] - env[h - 1]; flux[h] = d > 0 ? d : 0; }
+  const hd = hop / sr, lmin = Math.floor(60 / (200 * hd)), lmax = Math.ceil(60 / (60 * hd));
+  let bl = lmin, bc = -Infinity;
+  for (let l = lmin; l <= lmax; l++) {
+    let c = 0, nn = nh - l;
+    for (let i = 0; i < nn; i++) c += flux[i] * flux[i + l];
+    c /= nn;
+    if (c > bc) { bc = c; bl = l; }
+  }
+  const bpm = Math.round((60 / (bl * hd)) * 2) / 2;
+  return { bpm, beat: 60 / bpm };
 }
 
 // ── Quantize ─────────────────────────────────────────────────────
-function quantize(evts,beat){
-  const step=beat/2,phase=evts.length>0?evts[0].time%step:0;
-  return evts.map(ev=>({...ev,time:Math.max(0,Math.round((ev.time-phase)/step)*step+phase)}));
+function quantize(evts, beat) {
+  const step = beat / 2;
+  const phase = evts.length > 0 ? evts[0].time % step : 0;
+  return evts.map(ev => ({ ...ev, time: Math.max(0, Math.round((ev.time - phase) / step) * step + phase) }));
 }
 
 // ── Onset detection ──────────────────────────────────────────────
-async function detect(buf,mode,onProg){
-  const sr=buf.sampleRate,nc=buf.numberOfChannels,len=buf.length;
-  const mono=new Float32Array(len);
-  for(let c=0;c<nc;c++){const ch=buf.getChannelData(c);for(let i=0;i<len;i++)mono[i]+=ch[i]/nc;}
-  const N=2048,hop=Math.floor(sr*.02),nf=Math.floor((len-N)/hop)+1,fr=sr/N;
-  const {bands,thr,dthr,min,dup}=mode,nb=bands.length;
-  const bi=bands.map(([lo,hi])=>[Math.max(0,Math.floor(lo/fr)),Math.min(N/2-1,Math.ceil(hi/fr))]);
-  const hann=new Float32Array(N);for(let i=0;i<N;i++)hann[i]=.5*(1-Math.cos(2*Math.PI*i/N));
-  const evts=[],pe=new Float32Array(nb),hist=Array.from({length:nb},()=>[]);
-  for(let fi=0;fi<nf;fi++){
-    const st=fi*hop,w=new Float32Array(N);
-    for(let i=0;i<N;i++)w[i]=(st+i<len?mono[st+i]:0)*hann[i];
-    const m=mag(w,N),t=(st+N/2)/sr;
-    for(let b=0;b<nb;b++){
-      const[lo,hi]=bi[b];let e=0;
-      for(let j=lo;j<=hi;j++)e+=m[j]*m[j];
-      e=Math.sqrt(e/Math.max(hi-lo+1,1));
-      const h=hist[b];h.push(e);if(h.length>50)h.shift();
-      const avg=h.reduce((a,v)=>a+v,0)/h.length;
-      if(e>avg*thr&&e>pe[b]*dthr&&e>min)evts.push({time:t,band:b,energy:e});
-      pe[b]=e;
-    }
-    if(fi%600===0&&onProg)onProg(Math.floor(fi/nf*100));
+async function detect(buf, onProg) {
+  const sr = buf.sampleRate, nc = buf.numberOfChannels, len = buf.length;
+  const mono = new Float32Array(len);
+  for (let c = 0; c < nc; c++) {
+    const ch = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) mono[i] += ch[i] / nc;
   }
-  const out=[],lt=new Array(nb).fill(-Infinity);
-  for(const ev of evts.sort((a,b)=>a.time-b.time)){
-    if(ev.time-lt[ev.band]>dup){out.push({time:ev.time,lane:ev.band});lt[ev.band]=ev.time;}
+  const N = 2048, hop = Math.floor(sr * .02), nf = Math.floor((len - N) / hop) + 1, fr = sr / N;
+  const { bands, thr, dthr, min, dup } = DRUMS_CFG, nb = bands.length;
+  const bi = bands.map(([lo, hi]) => [Math.max(0, Math.floor(lo / fr)), Math.min(N / 2 - 1, Math.ceil(hi / fr))]);
+  const hann = new Float32Array(N);
+  for (let i = 0; i < N; i++) hann[i] = .5 * (1 - Math.cos(2 * Math.PI * i / N));
+  const evts = [], pe = new Float32Array(nb), hist = Array.from({ length: nb }, () => []);
+  for (let fi = 0; fi < nf; fi++) {
+    const st = fi * hop, w = new Float32Array(N);
+    for (let i = 0; i < N; i++) w[i] = (st + i < len ? mono[st + i] : 0) * hann[i];
+    const m = magSpec(w, N), t = (st + N / 2) / sr;
+    for (let b = 0; b < nb; b++) {
+      const [lo, hi] = bi[b];
+      let e = 0;
+      for (let j = lo; j <= hi; j++) e += m[j] * m[j];
+      e = Math.sqrt(e / Math.max(hi - lo + 1, 1));
+      const h = hist[b];
+      h.push(e);
+      if (h.length > 50) h.shift();
+      const avg = h.reduce((a, v) => a + v, 0) / h.length;
+      if (e > avg * thr && e > pe[b] * dthr && e > min) evts.push({ time: t, band: b, energy: e });
+      pe[b] = e;
+    }
+    if (fi % 600 === 0 && onProg) onProg(Math.floor(fi / nf * 100));
+  }
+  const out = [], lt = new Array(nb).fill(-Infinity);
+  for (const ev of evts.sort((a, b) => a.time - b.time)) {
+    if (ev.time - lt[ev.band] > dup) {
+      out.push({ time: ev.time, lane: ev.band });
+      lt[ev.band] = ev.time;
+    }
   }
   return out;
 }
 
-// ── Diff filter ──────────────────────────────────────────────────
-function applyDiff(evts,keep){
-  if(keep>=1)return evts;
-  const pl=[[],[],[],[]];evts.forEach((e,i)=>pl[e.lane].push(i));
-  const kept=new Set();pl.forEach(ix=>{const s=Math.round(1/keep);ix.forEach((x,p)=>{if(p%s===0)kept.add(x);});});
-  return evts.filter((_,i)=>kept.has(i));
+// ── Difficulty filter ─────────────────────────────────────────────
+function applyDiff(evts, keep) {
+  if (keep >= 1) return evts;
+  const pl = [[], [], [], []];
+  evts.forEach((e, i) => pl[e.lane].push(i));
+  const kept = new Set();
+  pl.forEach(ix => {
+    const s = Math.round(1 / keep);
+    ix.forEach((x, p) => { if (p % s === 0) kept.add(x); });
+  });
+  return evts.filter((_, i) => kept.has(i));
+}
+
+// Генератор искусственных нот по BPM-сетке
+function addFillerNotes(evts, beat, fillGrid, fillProb, maxSimultaneous, randomFn = Math.random) {
+  if (!fillGrid || !fillProb) return evts;
+  const bpm = 60 / beat;
+  const step = 60 / bpm / (fillGrid / 4);
+  const lastTime = evts.length > 0 ? evts[evts.length - 1].time : 0;
+  const allTimes = new Set(evts.map(e => e.time.toFixed(6)));
+
+  const laneCounts = [0, 0, 0, 0];
+  evts.forEach(e => laneCounts[e.lane]++);
+  const totalOrig = laneCounts.reduce((s, v) => s + v, 0) || 1;
+  const laneWeights = laneCounts.map(c => c / totalOrig);
+
+  const weightedRandomLane = () => {
+    const r = randomFn();
+    let acc = 0;
+    for (let i = 0; i < 4; i++) {
+      acc += laneWeights[i];
+      if (r <= acc) return i;
+    }
+    return 3;
+  };
+
+  const result = [...evts];
+  for (let t = step; t <= lastTime + step; t += step) {
+    if (allTimes.has(t.toFixed(6))) continue;
+    if (randomFn() > fillProb) continue;
+
+    const simultaneous = result.filter(e => Math.abs(e.time - t) < 0.01).length;
+    if (simultaneous >= maxSimultaneous) continue;
+
+    const lane = weightedRandomLane();
+    result.push({ time: t, lane, artificial: true });
+  }
+
+  return result.sort((a, b) => a.time - b.time);
+}
+
+// ── Ограничение одновременных нот (для всех сложностей) ────────
+function enforceSimultaneousLimit(events, maxSim) {
+  if (!events.length || maxSim >= 4) return events;
+  const tolerance = 0.05; // 50 мс
+  const result = [];
+  for (const ev of events) {
+    const count = result.filter(x => Math.abs(x.time - ev.time) < tolerance).length;
+    if (count < maxSim) result.push(ev);
+  }
+  return result;
 }
 
 // ── Click sound ──────────────────────────────────────────────────
-function click(ctx,t=0){
-  const sz=Math.floor(ctx.sampleRate*.08),b=ctx.createBuffer(1,sz,ctx.sampleRate),d=b.getChannelData(0);
-  for(let i=0;i<sz;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/sz,4);
-  const s=ctx.createBufferSource();s.buffer=b;
-  const f=ctx.createBiquadFilter();f.type="highpass";f.frequency.value=7000;
-  const g=ctx.createGain();g.gain.value=.6;
-  s.connect(f);f.connect(g);g.connect(ctx.destination);s.start(ctx.currentTime+t);
+function playClick(ctx, t = 0) {
+  const sz = Math.floor(ctx.sampleRate * .08), b = ctx.createBuffer(1, sz, ctx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < sz; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / sz, 4);
+  const s = ctx.createBufferSource(); s.buffer = b;
+  const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 7000;
+  const g = ctx.createGain(); g.gain.value = .6;
+  s.connect(f); f.connect(g); g.connect(ctx.destination); s.start(ctx.currentTime + t);
 }
 
-// ── EQ ───────────────────────────────────────────────────────────
-function makeEQ(ctx,mode,db){
-  if(mode==="drums"){
-    const hp=ctx.createBiquadFilter();hp.type="highpass";hp.frequency.value=30;
-    const n1=ctx.createBiquadFilter();n1.type="peaking";n1.frequency.value=600;n1.Q.value=1;n1.gain.value=0;
-    const n2=ctx.createBiquadFilter();n2.type="peaking";n2.frequency.value=1500;n2.Q.value=1;n2.gain.value=0;
-    const k=ctx.createBiquadFilter();k.type="peaking";k.frequency.value=80;k.Q.value=1.5;k.gain.value=0;
-    const sn=ctx.createBiquadFilter();sn.type="peaking";sn.frequency.value=250;sn.Q.value=2;sn.gain.value=0;
-    const ht=ctx.createBiquadFilter();ht.type="highshelf";ht.frequency.value=8000;ht.gain.value=0;
-    [hp,n1,n2,k,sn].forEach((x,i,a)=>{if(a[i+1])x.connect(a[i+1]);});sn.connect(ht);
-    const set=v=>{n1.gain.value=-v*.6;n2.gain.value=-v*.5;k.gain.value=v;sn.gain.value=v*.8;ht.gain.value=v*.7;};
-    set(db);return{input:hp,output:ht,set};
-  }
-  const f=ctx.createBiquadFilter();f.type="peaking";f.frequency.value=1000;f.Q.value=1;f.gain.value=db;
-  return{input:f,output:f,set:v=>f.gain.value=v};
+// ── EQ ────────────────────────────────────────────────────────────
+function makeEQ(ctx, db) {
+  const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 30;
+  const n1 = ctx.createBiquadFilter(); n1.type = "peaking"; n1.frequency.value = 600; n1.Q.value = 1; n1.gain.value = 0;
+  const n2 = ctx.createBiquadFilter(); n2.type = "peaking"; n2.frequency.value = 1500; n2.Q.value = 1; n2.gain.value = 0;
+  const k = ctx.createBiquadFilter(); k.type = "peaking"; k.frequency.value = 80; k.Q.value = 1.5; k.gain.value = 0;
+  const sn = ctx.createBiquadFilter(); sn.type = "peaking"; sn.frequency.value = 250; sn.Q.value = 2; sn.gain.value = 0;
+  const ht = ctx.createBiquadFilter(); ht.type = "highshelf"; ht.frequency.value = 8000; ht.gain.value = 0;
+  [hp, n1, n2, k, sn].forEach((x, i, a) => { if (a[i + 1]) x.connect(a[i + 1]); });
+  sn.connect(ht);
+  const set = v => { n1.gain.value = -v * .6; n2.gain.value = -v * .5; k.gain.value = v; sn.gain.value = v * .8; ht.gain.value = v * .7; };
+  set(db);
+  return { input: hp, output: ht, set };
 }
 
-// ── Canvas roundRect ─────────────────────────────────────────────
-function rr(ctx,x,y,w,h,r){
-  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
-  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
-  ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+function applyMissFX(gainNode, lpfNode) {
+  const ctx = gainNode.context;
+  const now = ctx.currentTime;
+  gainNode.gain.cancelScheduledValues(now);
+  gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+  gainNode.gain.linearRampToValueAtTime(0.35, now + 0.08);
+  gainNode.gain.linearRampToValueAtTime(1.0, now + 0.55);
+  lpfNode.frequency.cancelScheduledValues(now);
+  lpfNode.frequency.setValueAtTime(20000, now);
+  lpfNode.frequency.linearRampToValueAtTime(400, now + 0.08);
+  lpfNode.frequency.linearRampToValueAtTime(20000, now + 0.55);
 }
 
-// ── Helpers ──────────────────────────────────────────────────────
-const fmtSz=b=>b>1e9?(b/1e9).toFixed(1)+"GB":b>1e6?(b/1e6).toFixed(0)+"MB":(b/1024).toFixed(0)+"KB";
-const fmtDur=s=>s?Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0"):"";
-const etaStr=d=>{const s=Math.ceil(d*3.5);return s<60?`~${s} сек`:`~${Math.ceil(s/60)} мин`;};
+// ── Canvas roundRect ──────────────────────────────────────────────
+function rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+const fmtSz = b => b > 1e9 ? (b / 1e9).toFixed(1) + "GB" : b > 1e6 ? (b / 1e6).toFixed(0) + "MB" : (b / 1024).toFixed(0) + "KB";
+const fmtDur = s => s ? Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0") : "";
+
+function loadBindings() {
+  try { const s = localStorage.getItem("drumhero_keys"); if (s) return JSON.parse(s); } catch {}
+  return LANES_DEF.map(l => ({ key: l.defKey, code: l.defCode }));
+}
+function saveBindings(b) { try { localStorage.setItem("drumhero_keys", JSON.stringify(b)); } catch {} }
 
 // ══════════════════════════════════════════════════════════════════
-// COMPONENT
-// ══════════════════════════════════════════════════════════════════
-function App(){
-  // phases: lib | upload | analyzing | modeSelect | diff | countdown | game | result
-  const [ph,setPh]   = useState("lib");
-  const [lib,setLib] = useState([]);
-  const [name,setName]   = useState("");
-  const [mode,setMode]   = useState("drums");
-  const [evts,setEvts]   = useState([]);
-  const [score,setScore] = useState(0);
-  const [combo,setCombo] = useState(0);
-  const [maxCo,setMaxCo] = useState(0);
-  const [stats,setStats] = useState({p:0,g:0,m:0});
-  const [fb,setFb]       = useState(null);
-  const [pads,setPads]   = useState([0,0,0,0]); // 0=off,1=on
-  const [prog,setProg]   = useState(0);
-  const [anProg,setAnProg] = useState(0);
-  const [anLbl,setAnLbl]   = useState("");
-  const [cd,setCd]         = useState(null);
-  const [bpm,setBpm]       = useState(null);
-  const [eq,setEq]         = useState(0);
-  const [paused,setPaused] = useState(false);
-  const [rcd,setRcd]       = useState(null); // resume countdown
+function HPBar({ lives, maxLives }) {
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      {Array.from({ length: maxLives }).map((_, i) => (
+        <div key={i} style={{
+          fontSize: 20,
+          opacity: i < lives ? 1 : 0.2,
+          transition: "opacity .3s",
+          color: '#ff1744',
+          textShadow: '0 0 3px rgba(255, 23, 68, 0.5)'
+        }}>❤️</div>
+      ))}
+    </div>
+  );
+}
 
-  const canRef  = useRef(null);
+function BindScreen({ bindings, onSave, onCancel }) {
+  const [b, setB] = useState(bindings.map(x => ({ ...x })));
+  const [listening, setListening] = useState(null);
+
+  useEffect(() => {
+    if (listening === null) return;
+    const h = e => {
+      e.preventDefault();
+      if (e.code === "Escape") { setListening(null); return; }
+      const nb = [...b];
+      nb[listening] = { key: e.key.toUpperCase(), code: e.code };
+      setB(nb);
+      setListening(null);
+    };
+    window.addEventListener("keydown", h, { once: true });
+    return () => window.removeEventListener("keydown", h);
+  }, [listening, b]);
+
+  const S = {
+    root: { display: "flex", flexDirection: "column", alignItems: "center", gap: 20, maxWidth: 340, width: "100%" },
+    row: { display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "10px 14px", background: "#000000", border: "1px solid #ff1744", borderRadius: 8 },
+    btn: { padding: "8px 18px", background: "transparent", border: "1px solid #ff1744", borderRadius: 6, color: "#ff1744", fontSize: 11, letterSpacing: 2, textTransform: "uppercase" },
+  };
+
+  return (
+    <div style={S.root}>
+      <div style={{ fontSize: 11, letterSpacing: 4, color: "#ff1744", textTransform: "uppercase" }}>привязка клавиш</div>
+      <div style={{ fontSize: 9, color: "#ff1744", letterSpacing: 2, textAlign: "center" }}>
+        {isMobile() ? "Нажмите кнопку и нажмите клавишу" : "Нажмите кнопку и нажмите нужную клавишу"}
+      </div>
+      {LANES_DEF.map((lane, i) => (
+        <div key={i} style={{ ...S.row, borderColor: listening === i ? lane.color + "88" : "#ff1744" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: lane.color }} />
+            <span style={{ fontSize: 12, color: "#ffffff", letterSpacing: 2, textTransform: "uppercase" }}>{lane.label}</span>
+          </div>
+          <button onClick={() => setListening(i)}
+            style={{
+              ...S.btn, padding: "6px 16px",
+              borderColor: listening === i ? lane.color : "#ff1744",
+              color: listening === i ? lane.color : "#ff1744",
+              animation: listening === i ? "pulse .5s ease-in-out infinite" : "none"
+            }}>
+            {listening === i ? "[нажми]" : b[i].key}
+          </button>
+        </div>
+      ))}
+      <div style={{ display: "flex", gap: 10 }}>
+        <button style={{ ...S.btn, borderColor: "#ff1744", color: "#ff1744" }} onClick={() => { saveBindings(b); onSave(b); }}>✓ СОХРАНИТЬ</button>
+        <button style={S.btn} onClick={onCancel}>✕ ОТМЕНА</button>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN APP
+function App() {
+  const [ph, setPh] = useState("lib");
+  const [lib, setLib] = useState([]);
+  const [name, setName] = useState("");
+  const [evts, setEvts] = useState([]);
+  const [score, setScore] = useState(0);
+  const [combo, setCombo] = useState(0);
+  const [maxCo, setMaxCo] = useState(0);
+  const [stats, setStats] = useState({ p: 0, g: 0, m: 0 });
+  const [fb, setFb] = useState(null);
+  const [pads, setPads] = useState([0, 0, 0, 0]);
+  const [prog, setProg] = useState(0);
+  const [anProg, setAnProg] = useState(0);
+  const [anLbl, setAnLbl] = useState("");
+  const [cd, setCd] = useState(null);
+  const [bpm, setBpm] = useState(null);
+  const [eq, setEq] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [rcd, setRcd] = useState(null);
+  const [bindings, setBindings] = useState(() => loadBindings());
+  const [diffId, setDiffId] = useState("medium");
+  const [shake, setShake] = useState(false);
+  const [lives, setLives] = useState(5);
+  const [hpFlash, setHpFlash] = useState(false);
+  const [dead, setDead] = useState(false);
+  const [infiniteLives, setInfiniteLives] = useState(false);
+  const [trackHash, setTrackHash] = useState(null);
+
+  const canRef = useRef(null);
   const actxRef = useRef(null);
-  const srcRef  = useRef(null);
-  const bufRef  = useRef(null);   // full audio buffer
-  const t0Ref   = useRef(null);   // start time
-  const pauseRef= useRef(null);   // paused-at game time
-  const evsRef  = useRef([]);
-  const tsRef   = useRef([]);     // tile states
-  const rafRef  = useRef(null);
-  const scRef   = useRef(0);
-  const coRef   = useRef(0);
-  const mxRef   = useRef(0);
-  const stRef   = useRef({p:0,g:0,m:0});
-  const fbTRef  = useRef(null);
+  const srcRef = useRef(null);
+  const bufRef = useRef(null);
+  const t0Ref = useRef(null);
+  const pauseRef = useRef(null);
+  const evsRef = useRef([]);
+  const tsRef = useRef([]);
+  const rafRef = useRef(null);
+  const scRef = useRef(0);
+  const coRef = useRef(0);
+  const mxRef = useRef(0);
+  const stRef = useRef({ p: 0, g: 0, m: 0 });
+  const fbTRef = useRef(null);
   const fileRef = useRef(null);
   const playRef = useRef(false);
-  const isPRef  = useRef(false);
-  const diffRef = useRef(null);
-  const modeRef = useRef("drums");
-  const eqRef   = useRef(null);   // EQ node chain
+  const isPRef = useRef(false);
+  const diffRef = useRef(DIFFS.medium);
+  const eqNodeRef = useRef(null);
   const eqDbRef = useRef(0);
-  const bpmRef  = useRef(null);
+  const bpmRef = useRef(null);
+  const bindRef = useRef(bindings);
+  const missFxGainRef = useRef(null);
+  const missFxLPFRef = useRef(null);
+  const livesRef = useRef(5);
+  const healCounterRef = useRef(0);
+  const healThresholdRef = useRef(DIFFS.medium.healThreshold);
 
-  useEffect(()=>{evsRef.current=evts;},[evts]);
-  useEffect(()=>{modeRef.current=mode;},[mode]);
-  useEffect(()=>{eqDbRef.current=eq;},[eq]);
-  useEffect(()=>{bpmRef.current=bpm;},[bpm]);
+  useEffect(() => { evsRef.current = evts; }, [evts]);
+  useEffect(() => { bindRef.current = bindings; }, [bindings]);
+  useEffect(() => { eqDbRef.current = eq; }, [eq]);
+  useEffect(() => { bpmRef.current = bpm; }, [bpm]);
 
-  // Load library
-  useEffect(()=>{
-    dbAll().then(r=>setLib(r.map(({hash,name,duration,bpm,size,date})=>({hash,name,duration,bpm,size,date})).sort((a,b)=>b.date-a.date))).catch(()=>{});
-  },[]);
+  useEffect(() => {
+    dbAll().then(r => setLib(r.map(({ hash, name, duration, bpm, size, date }) =>
+      ({ hash, name, duration, bpm, size, date })
+    ).sort((a, b) => b.date - a.date))).catch(() => {});
+  }, []);
 
-  const showFb=useCallback((txt,col)=>{
-    setFb({txt,col,id:Date.now()});
+  const showFb = useCallback((txt, col) => {
+    setFb({ txt, col, id: Date.now() });
     clearTimeout(fbTRef.current);
-    fbTRef.current=setTimeout(()=>setFb(null),500);
-  },[]);
+    fbTRef.current = setTimeout(() => setFb(null), 500);
+  }, []);
 
-  // ── Decode file & analyze ────────────────────────────────────
-  const processFile=async(file)=>{
-    if(!file)return;
-    // iOS: accept any audio
-    const n=file.name.replace(/\.[^.]+$/,"");
-    setName(n);setPh("analyzing");setAnProg(0);setAnLbl("ДЕКОДИРУЕМ АУДИО...");
-    const ab=await file.arrayBuffer();
-    const hash=await sha256(ab);
-    let actx=actxRef.current;
-    if(!actx||actx.state==="closed"){actx=new AudioContext();actxRef.current=actx;}
-    // resume on iOS (requires user gesture, which we have)
-    if(actx.state==="suspended")await actx.resume();
+  const initHP = useCallback(() => {
+    const diff = diffRef.current;
+    if (infiniteLives) {
+      livesRef.current = 999;
+      healCounterRef.current = 0;
+      healThresholdRef.current = diff.healThreshold;
+      setLives(999);
+    } else {
+      livesRef.current = diff.lives;
+      healCounterRef.current = 0;
+      healThresholdRef.current = diff.healThreshold;
+      setLives(diff.lives);
+    }
+    setDead(false);
+  }, [infiniteLives]);
 
-    // Check cache
-    const cached=await dbGet(hash).catch(()=>null);
-    if(cached){
-      setAnLbl("ИЗ КЭША ⚡");setAnProg(100);
-      bufRef.current=await actx.decodeAudioData(cached.audio.slice(0));
-      const br=cached.bpm?{bpm:cached.bpm,beat:60/cached.bpm}:getBPM(bufRef.current);
-      setBpm(br);bpmRef.current=br;
-      setTimeout(()=>setPh("modeSelect"),300);
-      return;
+  const damageHP = useCallback(() => {
+    if (infiniteLives) return;
+    const nl = Math.max(0, livesRef.current - 1);
+    livesRef.current = nl;
+    setLives(nl);
+    healCounterRef.current = 0;
+    setHpFlash(true);
+    setTimeout(() => setHpFlash(false), 400);
+    if (nl <= 0) {
+      playRef.current = false;
+      try { srcRef.current?.stop(); } catch {}
+      setDead(true);
+      setTimeout(() => setPh("result"), 800);
     }
-    try{
-      setAnLbl("ДЕКОДИРУЕМ АУДИО...");
-      const decoded=await actx.decodeAudioData(ab.slice(0));
-      bufRef.current=decoded;
-      setAnLbl("ОПРЕДЕЛЯЕМ BPM...");setAnProg(20);
-      const br=getBPM(decoded);setBpm(br);bpmRef.current=br;
-      // Save to cache (store original arraybuffer)
-      setAnLbl("СОХРАНЯЕМ В КЭШ...");setAnProg(90);
-      const sz=ab.byteLength;
-      await dbPut({hash,name:n,audio:ab,duration:decoded.duration,bpm:br.bpm,size:sz,date:Date.now()});
-      setLib(prev=>[{hash,name:n,duration:decoded.duration,bpm:br.bpm,size:sz,date:Date.now()},...prev.filter(r=>r.hash!==hash)]);
-      setAnProg(100);
-      setTimeout(()=>setPh("modeSelect"),300);
-    }catch(e){
-      console.error(e);setPh("upload");
-      alert("Не удалось декодировать файл: "+e.message);
+  }, [infiniteLives]);
+
+  const healHP = useCallback(() => {
+    const threshold = healThresholdRef.current;
+    if (livesRef.current >= 5) return;
+    healCounterRef.current++;
+    if (healCounterRef.current >= threshold) {
+      livesRef.current = Math.min(5, livesRef.current + 1);
+      setLives(livesRef.current);
+      healCounterRef.current = 0;
+      showFb("❤️ +1", "#ff4081");
     }
+  }, [showFb]);
+
+  const autoMissDamage = useCallback(() => {
+    damageHP();
+  }, [damageHP]);
+
+  const processFile = async (file) => {
+    if (!file) return;
+    const n = file.name.replace(/\.[^.]+$/, "");
+    setName(n); setPh("analyzing"); setAnProg(0); setAnLbl("ДЕКОДИРУЕМ...");
+    const ab = await file.arrayBuffer();
+    const hash = await sha256(ab);
+    setTrackHash(hash);
+    let actx = actxRef.current;
+    if (!actx || actx.state === "closed") { actx = new AudioContext(); actxRef.current = actx; }
+    if (actx.state === "suspended") await actx.resume();
+    const cached = await dbGet(hash).catch(() => null);
+    if (cached) {
+      setAnLbl("ИЗ КЭША ⚡"); setAnProg(100);
+      bufRef.current = await actx.decodeAudioData(cached.audio.slice(0));
+      const br = cached.bpm ? { bpm: cached.bpm, beat: 60 / cached.bpm } : getBPM(bufRef.current);
+      setBpm(br); bpmRef.current = br;
+      setTimeout(() => runAnalysis(), 300); return;
+    }
+    try {
+      const decoded = await actx.decodeAudioData(ab.slice(0));
+      bufRef.current = decoded;
+      setAnLbl("BPM..."); setAnProg(20);
+      const br = getBPM(decoded); setBpm(br); bpmRef.current = br;
+      setAnLbl("КЭШ..."); setAnProg(90);
+      await dbPut({ hash, name: n, audio: ab, duration: decoded.duration, bpm: br.bpm, size: ab.byteLength, date: Date.now() });
+      setLib(prev => [{ hash, name: n, duration: decoded.duration, bpm: br.bpm, size: ab.byteLength, date: Date.now() }, ...prev.filter(r => r.hash !== hash)]);
+      setAnProg(100); setTimeout(() => runAnalysis(), 300);
+    } catch (e) { setPh("upload"); alert("Ошибка декодирования: " + e.message); }
   };
 
-  // Load from library
-  const loadLib=async(rec)=>{
-    setName(rec.name);setPh("analyzing");setAnProg(0);setAnLbl("ЗАГРУЖАЕМ...");
-    let actx=actxRef.current;
-    if(!actx||actx.state==="closed"){actx=new AudioContext();actxRef.current=actx;}
-    if(actx.state==="suspended")await actx.resume();
-    try{
-      const stored=await dbGet(rec.hash);
-      if(!stored)throw new Error("Не найдено в кэше");
-      bufRef.current=await actx.decodeAudioData(stored.audio.slice(0));
-      const br=rec.bpm?{bpm:rec.bpm,beat:60/rec.bpm}:getBPM(bufRef.current);
-      setBpm(br);bpmRef.current=br;setAnProg(100);
-      setTimeout(()=>setPh("modeSelect"),300);
-    }catch(e){setPh("lib");alert("Ошибка: "+e.message);}
+  const loadLib = async (rec) => {
+    setName(rec.name); setPh("analyzing"); setAnProg(0); setAnLbl("ЗАГРУЖАЕМ...");
+    setTrackHash(rec.hash);
+    let actx = actxRef.current;
+    if (!actx || actx.state === "closed") { actx = new AudioContext(); actxRef.current = actx; }
+    if (actx.state === "suspended") await actx.resume();
+    try {
+      const stored = await dbGet(rec.hash);
+      if (!stored) throw new Error("Не найдено");
+      bufRef.current = await actx.decodeAudioData(stored.audio.slice(0));
+      const br = rec.bpm ? { bpm: rec.bpm, beat: 60 / rec.bpm } : getBPM(bufRef.current);
+      setBpm(br); bpmRef.current = br; setAnProg(100);
+      setTimeout(() => runAnalysis(), 300);
+    } catch (e) { setPh("lib"); alert("Ошибка: " + e.message); }
   };
 
-  // ── Analyze + start game ─────────────────────────────────────
-  const startMode=async(m)=>{
-    setMode(m);modeRef.current=m;
-    setPh("analyzing");setAnProg(0);setAnLbl("FFT АНАЛИЗ...");
-    const raw=await detect(bufRef.current,MODES[m],p=>{
+  const runAnalysis = async () => {
+    setPh("analyzing"); setAnProg(0); setAnLbl("FFT...");
+    const raw = await detect(bufRef.current, p => {
       setAnProg(p);
-      if(p<40)setAnLbl("FFT АНАЛИЗ...");
-      else if(p<75)setAnLbl("ПОИСК ОНСЕТОВ...");
+      if (p < 40) setAnLbl("FFT АНАЛИЗ...");
+      else if (p < 75) setAnLbl("ОНСЕТЫ...");
       else setAnLbl("КВАНТИЗАЦИЯ...");
     });
-    const br=bpmRef.current||getBPM(bufRef.current);
-    setBpm(br);bpmRef.current=br;
-    evsRef.current=quantize(raw,br.beat);
-    setAnProg(100);
-    setTimeout(()=>setPh("diff"),300);
+    const br = bpmRef.current || getBPM(bufRef.current);
+    setBpm(br); bpmRef.current = br;
+    evsRef.current = quantize(raw, br.beat);
+    setAnProg(100); setTimeout(() => setPh("diff"), 300);
   };
 
-  const chooseDiff=d=>{
-    diffRef.current=d;
-    const filtered=applyDiff(evsRef.current,d.keep).map(e=>({...e,time:e.time+DLY}));
-    setEvts(filtered);tsRef.current=filtered.map(()=>"p");
+  const chooseDiff = (id) => {
+    setDiffId(id);
+    const diff = DIFFS[id];
+    diffRef.current = diff;
+
+    let filtered = applyDiff(evsRef.current, diff.keep);
+    const br = bpmRef.current;
+    const beat = br ? br.beat : 0.5;
+    // Создаем сеяный генератор для консистентного паттерна нот
+    const seed = trackHash ? hashCode(trackHash + id) : Date.now();
+    const seededRandom = makeSeededRandom(seed);
+    filtered = quantize(filtered, beat);
+    filtered = addFillerNotes(filtered, beat, diff.fillGrid, diff.fillProb, diff.maxSimultaneous, seededRandom);
+    // Ограничение одновременных нот – теперь работает на всех сложностях
+    filtered = enforceSimultaneousLimit(filtered, diff.maxSimultaneous);
+    const final = filtered.map(e => ({ ...e, time: e.time + DLY }));
+
+    setEvts(final);
+    tsRef.current = final.map(() => "p");
+    initHP();
     startCD();
   };
 
-  const startCD=()=>{
-    setPh("countdown");setCd(3);
-    const a=actxRef.current;
-    [.3,1.3,2.3].forEach(t=>click(a,t));
-    setTimeout(()=>setCd(2),1000);setTimeout(()=>setCd(1),2000);
-    setTimeout(()=>setCd("GO!"),3000);setTimeout(()=>setPh("game"),3600);
+  const startCD = () => {
+    setPh("countdown"); setCd(3);
+    const a = actxRef.current;
+    [.3, 1.3, 2.3].forEach(t => playClick(a, t));
+    setTimeout(() => setCd(2), 1000);
+    setTimeout(() => setCd(1), 2000);
+    setTimeout(() => setCd("GO!"), 3000);
+    setTimeout(() => setPh("game"), 3600);
   };
 
-  // Resume with countdown overlay
-  const doResumeCD=useCallback(()=>{
-    const a=actxRef.current;
-    [.3,1.3,2.3].forEach(t=>click(a,t));
-    setRcd(3);setTimeout(()=>setRcd(2),1000);setTimeout(()=>setRcd(1),2000);
-    setTimeout(()=>setRcd("GO!"),3000);
-    setTimeout(()=>{
+  const doResumeCD = useCallback(() => {
+    const a = actxRef.current;
+    [.3, 1.3, 2.3].forEach(t => playClick(a, t));
+    setRcd(3);
+    setTimeout(() => setRcd(2), 1000);
+    setTimeout(() => setRcd(1), 2000);
+    setTimeout(() => setRcd("GO!"), 3000);
+    setTimeout(() => {
       setRcd(null);
-      const at=pauseRef.current,src=a.createBufferSource();
-      src.buffer=bufRef.current;
-      const eq=makeEQ(a,MODES[modeRef.current].eqMode,eqDbRef.current);
-      eqRef.current=eq;eq.output.connect(a.destination);src.connect(eq.input);
-      srcRef.current=src;t0Ref.current=a.currentTime-at;
-      src.start(0,Math.max(0,at-DLY));
-      src.onended=()=>{if(playRef.current){playRef.current=false;setTimeout(()=>setPh("result"),500);}};
-      playRef.current=true;isPRef.current=false;setPaused(false);
-    },3600);
-  },[]);
+      const at = pauseRef.current;
+      const src = a.createBufferSource(); src.buffer = bufRef.current;
+      const eq = makeEQ(a, eqDbRef.current);
+      const missFxLPF = a.createBiquadFilter(); missFxLPF.type = "lowpass"; missFxLPF.frequency.value = 20000;
+      const missFxGain = a.createGain(); missFxGain.gain.value = 1;
+      eq.output.connect(missFxLPF); missFxLPF.connect(missFxGain); missFxGain.connect(a.destination);
+      eqNodeRef.current = eq;
+      missFxGainRef.current = missFxGain;
+      missFxLPFRef.current = missFxLPF;
+      src.connect(eq.input);
+      srcRef.current = src;
+      t0Ref.current = a.currentTime - at;
+      src.start(0, Math.max(0, at - DLY));
+      src.onended = () => { if (playRef.current) { playRef.current = false; setTimeout(() => setPh("result"), 500); } };
+      playRef.current = true; isPRef.current = false; setPaused(false);
+    }, 3600);
+  }, []);
 
-  // Start audio
-  const startAudio=useCallback(()=>{
-    if(!bufRef.current||!actxRef.current)return;
-    scRef.current=0;coRef.current=0;mxRef.current=0;stRef.current={p:0,g:0,m:0};
-    setScore(0);setCombo(0);setMaxCo(0);setStats({p:0,g:0,m:0});
-    tsRef.current=evsRef.current.map(()=>"p");
-    playRef.current=true;isPRef.current=false;setPaused(false);
-    const a=actxRef.current;
-    if(a.state==="suspended")a.resume();
-    const eq=makeEQ(a,MODES[modeRef.current].eqMode,eqDbRef.current);
-    eqRef.current=eq;eq.output.connect(a.destination);
-    const src=a.createBufferSource();src.buffer=bufRef.current;src.connect(eq.input);
-    srcRef.current=src;t0Ref.current=a.currentTime;
-    src.start(a.currentTime+DLY);
-    src.onended=()=>{if(playRef.current){playRef.current=false;setTimeout(()=>setPh("result"),500);}};
-  },[]);
+  const startAudio = useCallback(() => {
+    if (!bufRef.current || !actxRef.current) return;
+    scRef.current = 0; coRef.current = 0; mxRef.current = 0; stRef.current = { p: 0, g: 0, m: 0 };
+    setScore(0); setCombo(0); setMaxCo(0); setStats({ p: 0, g: 0, m: 0 }); setDead(false);
+    tsRef.current = evsRef.current.map(() => "p");
+    playRef.current = true; isPRef.current = false; setPaused(false);
+    const a = actxRef.current;
+    if (a.state === "suspended") a.resume();
+    const eq = makeEQ(a, eqDbRef.current);
+    const missFxLPF = a.createBiquadFilter(); missFxLPF.type = "lowpass"; missFxLPF.frequency.value = 20000;
+    const missFxGain = a.createGain(); missFxGain.gain.value = 1;
+    eq.output.connect(missFxLPF); missFxLPF.connect(missFxGain); missFxGain.connect(a.destination);
+    eqNodeRef.current = eq;
+    missFxGainRef.current = missFxGain;
+    missFxLPFRef.current = missFxLPF;
+    const src = a.createBufferSource(); src.buffer = bufRef.current; src.connect(eq.input);
+    srcRef.current = src; t0Ref.current = a.currentTime;
+    src.start(a.currentTime + DLY);
+    src.onended = () => { if (playRef.current) { playRef.current = false; setTimeout(() => setPh("result"), 500); } };
+  }, []);
 
-  useEffect(()=>{if(ph==="game"&&!isPRef.current)setTimeout(()=>startAudio(),100);},[ph,startAudio]);
+  useEffect(() => { if (ph === "game" && !isPRef.current) setTimeout(() => startAudio(), 100); }, [ph, startAudio]);
 
-  // Pause / Resume
-  const pauseGame=useCallback(()=>{
-    if(!playRef.current||isPRef.current)return;
-    pauseRef.current=actxRef.current.currentTime-t0Ref.current;
-    isPRef.current=true;playRef.current=false;setPaused(true);
-    try{srcRef.current?.stop();}catch{}
-  },[]);
-  const resumeGame=useCallback(()=>{if(!isPRef.current)return;doResumeCD();},[doResumeCD]);
+  const pauseGame = useCallback(() => {
+    if (!playRef.current || isPRef.current) return;
+    pauseRef.current = actxRef.current.currentTime - t0Ref.current;
+    isPRef.current = true; playRef.current = false; setPaused(true);
+    try { srcRef.current?.stop(); } catch {}
+  }, []);
 
-  useEffect(()=>{
-    if(ph!=="game")return;
-    const h=e=>{if(e.code==="Space"){e.preventDefault();isPRef.current?resumeGame():pauseGame();}};
-    window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);
-  },[ph,pauseGame,resumeGame]);
+  const resumeGame = useCallback(() => {
+    if (!isPRef.current) return;
+    doResumeCD();
+  }, [doResumeCD]);
 
-  // ── Canvas render loop ────────────────────────────────────────
-  useEffect(()=>{
-    if(ph!=="game")return;
-    const cv=canRef.current;if(!cv)return;
-    const ctx=cv.getContext("2d"),W=cv.width,H=cv.height,lw=W/4,hy=H*(HZY/100);
-    const lanes=MODES[modeRef.current].lanes;
-    const draw=()=>{
-      const now=(actxRef.current&&t0Ref.current!=null&&!isPRef.current)
-        ?actxRef.current.currentTime-t0Ref.current:(pauseRef.current||0);
-      const dur=(bufRef.current?.duration||1)+DLY;
-      setProg(Math.min(now/dur*100,100));
-      ctx.fillStyle="#0d0d14";ctx.fillRect(0,0,W,H);
-      // BPM grid
-      if(bpmRef.current){
-        const bd=bpmRef.current.beat;ctx.strokeStyle="#ffffff07";ctx.lineWidth=1;
-        for(let bt=Math.ceil((now-H/SPD)/bd)*bd;bt<now+1;bt+=bd/2){
-          const y=hy-(bt-now)*SPD;if(y<0||y>H)continue;
-          ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+  useEffect(() => {
+    if (ph !== "game") return;
+    const h = e => { if (e.code === "Space") { e.preventDefault(); isPRef.current ? resumeGame() : pauseGame(); } };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [ph, pauseGame, resumeGame]);
+
+  useEffect(() => {
+    if (ph !== "game") return;
+    const cv = canRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d"), W = cv.width, H = cv.height, lw = W / 4, hy = H * (HZY / 100);
+    const draw = () => {
+      const now = (actxRef.current && t0Ref.current != null && !isPRef.current)
+        ? actxRef.current.currentTime - t0Ref.current : (pauseRef.current || 0);
+      const dur = (bufRef.current?.duration || 1) + DLY;
+      setProg(Math.min(now / dur * 100, 100));
+
+      ctx.fillStyle = "#0d0d14";
+      ctx.fillRect(0, 0, W, H);
+
+      if (bpmRef.current) {
+        const bd = bpmRef.current.beat;
+        ctx.strokeStyle = "#ffffff07";
+        ctx.lineWidth = 1;
+        for (let bt = Math.ceil((now - H / SPD) / bd) * bd; bt < now + 1; bt += bd / 2) {
+          const y = hy - (bt - now) * SPD;
+          if (y < 0 || y > H) continue;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
         }
       }
-      // Lane dividers
-      for(let i=1;i<4;i++){ctx.strokeStyle="#1a1a2e";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(i*lw,0);ctx.lineTo(i*lw,H);ctx.stroke();}
-      // Tiles
-      evsRef.current.forEach((ev,i)=>{
-        const st=tsRef.current[i];if(st==="h")return;
-        const y=hy-(ev.time-now)*SPD;if(y<-TH-10||y>H+10)return;
-        if(y>hy+TH*2&&st==="p"&&!isPRef.current){
-          tsRef.current[i]="m";coRef.current=0;setCombo(0);stRef.current.m++;setStats({...stRef.current});
+
+      for (let i = 1; i < 4; i++) {
+        ctx.strokeStyle = "#1a1a2e"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(i * lw, 0); ctx.lineTo(i * lw, H); ctx.stroke();
+      }
+
+      evsRef.current.forEach((ev, i) => {
+        const st = tsRef.current[i];
+        if (st === "h") return;
+        const y = hy - (ev.time - now) * SPD;
+        if (y < -TH - 10 || y > H + 10) return;
+
+        if (y > hy + TH * 2 && st === "p" && !isPRef.current) {
+          tsRef.current[i] = "m";
+          coRef.current = 0; setCombo(0);
+          stRef.current.m++;
+          setStats({ ...stRef.current });
+          autoMissDamage();
         }
-        const x=ev.lane*lw,col=lanes[ev.lane]?.c||"#fff";
-        ctx.globalAlpha=st==="m"?.15:1;
-        if(st==="p"){const g=ctx.createRadialGradient(x+lw/2,y+TH/2,2,x+lw/2,y+TH/2,lw*.8);g.addColorStop(0,col+"44");g.addColorStop(1,"transparent");ctx.fillStyle=g;ctx.fillRect(x-10,y-10,lw+20,TH+20);}
-        ctx.fillStyle=col;rr(ctx,x+4,y,lw-8,TH,6);ctx.fill();
-        ctx.strokeStyle="#ffffff88";ctx.lineWidth=1.5;ctx.stroke();
-        ctx.fillStyle="#ffffff2e";rr(ctx,x+4,y,lw-8,TH/3,6);ctx.fill();
-        ctx.globalAlpha=1;
+
+        const x = ev.lane * lw, col = LANES_DEF[ev.lane]?.color || "#fff";
+        ctx.globalAlpha = st === "m" ? .12 : 1;
+
+        if (st === "p") {
+          const g = ctx.createRadialGradient(x + lw / 2, y + TH / 2, 2, x + lw / 2, y + TH / 2, lw * .8);
+          g.addColorStop(0, col + "44");
+          g.addColorStop(1, "transparent");
+          ctx.fillStyle = g;
+          ctx.fillRect(x - 10, y - 10, lw + 20, TH + 20);
+        }
+        ctx.fillStyle = col;
+        rr(ctx, x + 4, y, lw - 8, TH, 6);
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff88"; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = "#ffffff2e";
+        rr(ctx, x + 4, y, lw - 8, TH / 3, 6);
+        ctx.fill();
+        ctx.globalAlpha = 1;
       });
-      // Hit line
-      const mc=MODES[modeRef.current].color;
-      ctx.strokeStyle=mc+"66";ctx.lineWidth=2;ctx.shadowColor=mc;ctx.shadowBlur=12;
-      ctx.beginPath();ctx.moveTo(0,hy);ctx.lineTo(W,hy);ctx.stroke();ctx.shadowBlur=0;
-      rafRef.current=requestAnimationFrame(draw);
+
+      ctx.strokeStyle = "#ff174466"; ctx.lineWidth = 2;
+      ctx.shadowColor = "#ff1744"; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(W, hy); ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      rafRef.current = requestAnimationFrame(draw);
     };
-    rafRef.current=requestAnimationFrame(draw);
-    return()=>{cancelAnimationFrame(rafRef.current);};
-  },[ph]);
+    rafRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [ph, autoMissDamage]);
 
-  // ── Hit handler ───────────────────────────────────────────────
-  const hit=useCallback(li=>{
-    setPads(prev=>{const n=[...prev];n[li]=1;return n;});
-    setTimeout(()=>setPads(prev=>{const n=[...prev];n[li]=0;return n;}),100);
-    if(!playRef.current||!actxRef.current||isPRef.current)return;
-    const now=actxRef.current.currentTime-t0Ref.current,diff=diffRef.current;
-    let best=null,bd=Infinity;
-    evsRef.current.forEach((ev,i)=>{
-      if(ev.lane!==li||tsRef.current[i]!=="p")return;
-      const d=Math.abs(ev.time-now)*1000;if(d<bd){bd=d;best=i;}
+  const hit = useCallback((li) => {
+    setPads(prev => { const n = [...prev]; n[li] = 1; return n; });
+    setTimeout(() => setPads(prev => { const n = [...prev]; n[li] = 0; return n; }), 100);
+
+    if (!playRef.current || !actxRef.current || isPRef.current) return;
+
+    const now = actxRef.current.currentTime - t0Ref.current;
+    const diff = diffRef.current;
+    let best = null, bd = Infinity;
+
+    evsRef.current.forEach((ev, i) => {
+      if (ev.lane !== li || tsRef.current[i] !== "p") return;
+      const d = Math.abs(ev.time - now) * 1000;
+      if (d < bd) { bd = d; best = i; }
     });
-    if(best!==null&&bd<=diff.goodMs){
-      tsRef.current[best]="h";coRef.current++;
-      if(coRef.current>mxRef.current){mxRef.current=coRef.current;setMaxCo(mxRef.current);}
+
+    if (best !== null && bd <= diff.goodMs) {
+      tsRef.current[best] = "h";
+      coRef.current++;
+      if (coRef.current > mxRef.current) { mxRef.current = coRef.current; setMaxCo(mxRef.current); }
       setCombo(coRef.current);
-      const mult=Math.min(Math.floor(coRef.current/5)+1,4);
-      if(bd<=diff.hitMs){scRef.current+=100*mult;setScore(scRef.current);stRef.current.p++;setStats({...stRef.current});showFb("PERFECT","#76ff03");}
-      else{scRef.current+=50*mult;setScore(scRef.current);stRef.current.g++;setStats({...stRef.current});showFb("GOOD","#00e5ff");}
-    }else{coRef.current=0;setCombo(0);showFb("MISS","#ff1744");}
-  },[showFb]);
 
-  // Keyboard (F G H J)
-  useEffect(()=>{
-    if(ph!=="game")return;
-    const map={'KeyF':0,'KeyG':1,'KeyH':2,'KeyJ':3};
-    const h=e=>{if(e.code==="Space")return;const l=map[e.code];if(l===undefined)return;e.preventDefault();hit(l);};
-    window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);
-  },[ph,hit]);
+      const mult = Math.min(Math.floor(coRef.current / 5) + 1, 4);
+      const isPerfect = bd <= diff.hitMs;
+      if (isPerfect) {
+        scRef.current += 100 * mult;
+        stRef.current.p++;
+        showFb("PERFECT", "#76ff03");
+      } else {
+        scRef.current += 50 * mult;
+        stRef.current.g++;
+        showFb("GOOD", "#00e5ff");
+      }
+      setScore(scRef.current);
+      setStats({ ...stRef.current });
+      healHP();
+    } else {
+      coRef.current = 0;
+      setCombo(0);
+      stRef.current.m++;
+      setStats({ ...stRef.current });
+      showFb("MISS", "#ff1744");
+      setShake(true);
+      setTimeout(() => setShake(false), 400);
+      damageHP();
+      if (missFxGainRef.current && missFxLPFRef.current)
+        applyMissFX(missFxGainRef.current, missFxLPFRef.current);
+    }
+  }, [showFb, healHP, damageHP]);
 
-  const stopGame=useCallback(()=>{
-    playRef.current=false;isPRef.current=false;
-    try{srcRef.current?.stop();}catch{}
-    cancelAnimationFrame(rafRef.current);setPh("result");
-  },[]);
+  useEffect(() => {
+    if (ph !== "game") return;
+    const h = e => {
+      if (e.code === "Space") return;
+      const li = bindRef.current.findIndex(b => b.code === e.code);
+      if (li === -1) return;
+      e.preventDefault();
+      hit(li);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [ph, hit]);
 
-  const again=useCallback(()=>{
-    try{srcRef.current?.stop();}catch{}
-    playRef.current=false;isPRef.current=false;setPaused(false);
-    cancelAnimationFrame(rafRef.current);startCD();
-  },[]);
+  const stopGame = useCallback(() => {
+    playRef.current = false; isPRef.current = false;
+    try { srcRef.current?.stop(); } catch {}
+    cancelAnimationFrame(rafRef.current);
+    setPh("result");
+  }, []);
 
-  const delTrack=async(hash,e)=>{
-    e.stopPropagation();await dbDel(hash).catch(()=>{});
-    setLib(prev=>prev.filter(r=>r.hash!==hash));
+  const again = useCallback(() => {
+    try { srcRef.current?.stop(); } catch {}
+    playRef.current = false; isPRef.current = false; setPaused(false);
+    cancelAnimationFrame(rafRef.current);
+    initHP();
+    startCD();
+  }, [initHP]);
+
+  const delTrack = async (hash, e) => {
+    e.stopPropagation();
+    await dbDel(hash).catch(() => {});
+    setLib(prev => prev.filter(r => r.hash !== hash));
   };
 
-  const totalH=stats.p+stats.g,totalN=evts.length;
-  const acc=totalN>0?Math.round(totalH/totalN*100):0;
-  const M=MODES[mode],lanes=M.lanes;
+  const totalH = stats.p + stats.g, totalN = evts.length;
+  const acc = totalN > 0 ? Math.round(totalH / totalN * 100) : 0;
+  const diff = DIFFS[diffId];
 
-  // Shared styles
-  const S={
-    root:{minHeight:"100vh",background:"#0a0a0f",display:"flex",flexDirection:"column",
-      alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",
-      color:"#e0e0e0",userSelect:"none",padding:"20px 16px",WebkitUserSelect:"none"},
-    title:{fontSize:32,fontWeight:900,letterSpacing:8,textTransform:"uppercase",color:"#fff",
-      textShadow:"0 0 30px #ff1744,0 0 60px #ff174455",marginBottom:4},
-    sub:{fontSize:11,letterSpacing:4,color:"#333",marginBottom:24,textTransform:"uppercase"},
-    btn:{padding:"8px 18px",background:"transparent",border:"1px solid #333",borderRadius:6,
-      color:"#aaa",fontSize:11,letterSpacing:2,textTransform:"uppercase"},
-    pl:{fontSize:10,letterSpacing:3,color:"#444",textTransform:"uppercase",marginBottom:2},
-    bar:{width:320,height:2,background:"#1a1a2e",borderRadius:2,marginBottom:12},
-    card:{background:"#111118",border:"1px solid #1a1a2e",borderRadius:8,padding:"12px 14px"},
+  const S = {
+    root: { minHeight: "100vh", background: "#000000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Unbounded', cursive, sans-serif", color: "#ffffff", userSelect: "none", padding: "20px 16px", WebkitUserSelect: "none" },
+    title: { fontSize: 32, fontWeight: 900, letterSpacing: 8, textTransform: "uppercase", color: "#ff1744", textShadow: "0 0 20px #ff1744,0 0 30px rgba(255, 23, 68, 0.5)", marginBottom: 4 },
+    sub: { fontSize: 11, letterSpacing: 4, color: "#ff1744", marginBottom: 24, textTransform: "uppercase" },
+    btn: { padding: "8px 18px", background: "transparent", border: "1px solid #ff1744", borderRadius: 6, color: "#ff1744", fontSize: 11, letterSpacing: 2, textTransform: "uppercase" },
+    pl: { fontSize: 10, letterSpacing: 3, color: "#ff1744", textTransform: "uppercase", marginBottom: 2 },
+    bar: { width: "100%", maxWidth: 320, height: 2, background: "#000000", borderRadius: 2, marginBottom: 12 },
+    card: { background: "#000000", border: "1px solid #ff1744", borderRadius: 8, padding: "12px 14px" },
   };
 
-  return(
+  if (ph === "bind") {
+    return (
+      <div style={S.root}>
+        <div style={S.title}>DRUM HERO</div>
+        <div style={S.sub}>beat your rhythm</div>
+        <BindScreen bindings={bindings} onSave={b => { setBindings(b); setPh("lib"); }} onCancel={() => setPh("lib")} />
+      </div>
+    );
+  }
+
+  return (
     <div style={S.root}>
       <div style={S.title}>DRUM HERO</div>
       <div style={S.sub}>beat your rhythm</div>
 
-      {/* ── LIBRARY ── */}
-      {ph==="lib"&&(
-        <div style={{width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:14}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:10,letterSpacing:3,color:"#444",textTransform:"uppercase"}}>библиотека</div>
-            <button style={{...S.btn,padding:"6px 14px",fontSize:10}} onClick={()=>setPh("upload")}>+ ЗАГРУЗИТЬ</button>
-          </div>
-          {lib.length===0?(
-            <div style={{textAlign:"center",padding:"48px 0",color:"#2a2a2a"}}>
-              <div style={{fontSize:40,marginBottom:8}}>🎵</div>
-              <div style={{fontSize:11,letterSpacing:2}}>Библиотека пуста</div>
+      {ph === "lib" && (
+        <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff1744", textTransform: "uppercase" }}>библиотека</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={{ ...S.btn, padding: "6px 12px", fontSize: 9 }} onClick={() => setPh("bind")}>⌨ КЛАВИШИ</button>
+              <button style={{ ...S.btn, padding: "6px 12px", fontSize: 9 }} onClick={() => setPh("upload")}>+ ТРЕК</button>
             </div>
-          ):(
-            <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:"60vh",overflowY:"auto"}}>
-              {lib.map(r=>(
-                <div key={r.hash} onClick={()=>loadLib(r)} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"border-color .15s"}}
-                     onMouseEnter={e=>e.currentTarget.style.borderColor="#333"}
-                     onMouseLeave={e=>e.currentTarget.style.borderColor="#1a1a2e"}>
-                  <div style={{fontSize:22}}>🎵</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,color:"#ccc",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
-                    <div style={{fontSize:9,color:"#444",marginTop:2}}>{fmtDur(r.duration)} · {r.bpm&&`♩${r.bpm} · `}{fmtSz(r.size||0)}</div>
+          </div>
+          {lib.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: "#ff1744" }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>🥁</div>
+              <div style={{ fontSize: 11, letterSpacing: 2 }}>Библиотека пуста</div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: "60vh", overflowY: "auto" }}>
+              {lib.map(r => (
+                <div key={r.hash} onClick={() => loadLib(r)}
+                  style={{ ...S.card, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transition: "border-color .15s" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = "#ff1744"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = "#ff1744"}>
+                  <div style={{ fontSize: 22 }}>🎵</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: "#ffffff", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                    <div style={{ fontSize: 9, color: "#ff1744", marginTop: 2 }}>{fmtDur(r.duration)}{r.bpm ? ` · ♩${r.bpm}` : ""} · {fmtSz(r.size || 0)}</div>
                   </div>
-                  <button onClick={e=>delTrack(r.hash,e)} style={{background:"transparent",border:"none",color:"#2a2a2a",fontSize:16,padding:"4px 6px",borderRadius:4,flexShrink:0}}
-                          onMouseEnter={e=>e.currentTarget.style.color="#ff1744"}
-                          onMouseLeave={e=>e.currentTarget.style.color="#2a2a2a"}>✕</button>
+                  <button onClick={e => delTrack(r.hash, e)}
+                    style={{ background: "transparent", border: "1px solid #ff1744", color: "#ff1744", fontSize: 16, padding: "4px 6px", borderRadius: 4, flexShrink: 0 }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255, 23, 68, 0.1)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>✕</button>
                 </div>
               ))}
             </div>
@@ -541,207 +1024,205 @@ function App(){
         </div>
       )}
 
-      {/* ── UPLOAD ── */}
-      {ph==="upload"&&(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,width:"100%",maxWidth:360}}>
-          <div onClick={()=>fileRef.current?.click()}
-               onDragOver={e=>e.preventDefault()}
-               onDrop={e=>{e.preventDefault();processFile(e.dataTransfer.files[0]);}}
-               style={{width:"100%",border:"2px dashed #2a2a2a",borderRadius:12,padding:"40px 32px",textAlign:"center",cursor:"pointer",background:"#111118"}}>
-            <div style={{fontSize:48,marginBottom:10}}>🎵</div>
-            <div style={{color:"#ccc",fontSize:15,marginBottom:6,fontWeight:700,letterSpacing:2}}>ЗАГРУЗИ ТРЕК</div>
-            <div style={{color:"#444",fontSize:11,letterSpacing:1}}>MP3 / WAV / M4A / AAC</div>
-            <div style={{color:"#444",fontSize:11,marginTop:4}}>drag & drop или нажми</div>
-            {/* iOS: accept="*" + capture workaround */}
-            <input ref={fileRef} type="file" accept="audio/*,audio/mp3,audio/mpeg,audio/mp4,audio/m4a,.mp3,.wav,.m4a,.aac,.ogg,.flac"
-                   style={{display:"none"}} onChange={e=>processFile(e.target.files[0])}/>
+      {ph === "upload" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, width: "100%", maxWidth: 360 }}>
+          <div onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); processFile(e.dataTransfer.files[0]); }}
+            style={{ width: "100%", border: "2px dashed #ff1744", borderRadius: 12, padding: "40px 32px", textAlign: "center", cursor: "pointer", background: "#000000" }}>
+            <div style={{ fontSize: 48, marginBottom: 10 }}>🎵</div>
+            <div style={{ color: "#ff1744", fontSize: 15, marginBottom: 6, fontWeight: 700, letterSpacing: 2 }}>ЗАГРУЗИ ТРЕК</div>
+            <div style={{ color: "#ffffff", fontSize: 11 }}>MP3 / WAV / M4A / AAC</div>
+            <div style={{ color: "#ff1744", fontSize: 10, marginTop: 8 }}>Повторная загрузка того же трека — мгновенно из кэша</div>
+            <input ref={fileRef} type="file" accept="audio/*,audio/mp3,audio/mpeg,audio/mp4,audio/m4a,.mp3,.wav,.m4a,.aac,.ogg,.flac" style={{ display: "none" }} onChange={e => processFile(e.target.files[0])} />
           </div>
-          <button style={{...S.btn,fontSize:10}} onClick={()=>setPh("lib")}>← библиотека</button>
+          <button style={{ ...S.btn, fontSize: 10 }} onClick={() => setPh("lib")}>← библиотека</button>
         </div>
       )}
 
-      {/* ── ANALYZING ── */}
-      {ph==="analyzing"&&(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,textAlign:"center"}}>
-          <div style={{fontSize:12,letterSpacing:4,color:"#555",textTransform:"uppercase"}}>{anLbl||"АНАЛИЗИРУЕМ..."}</div>
-          <div style={{display:"flex",gap:8}}>{[1,2,3].map(n=><div key={n} className={`d${n}`} style={{width:10,height:10,borderRadius:"50%",background:"#ff1744"}}/>)}</div>
-          <div style={{width:260,height:2,background:"#1a1a2e",borderRadius:2}}>
-            <div style={{width:`${anProg}%`,height:"100%",background:"#ff1744",borderRadius:2,transition:"width .3s"}}/>
+      {ph === "analyzing" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, textAlign: "center" }}>
+          <div style={{ fontSize: 12, letterSpacing: 4, color: "#555", textTransform: "uppercase" }}>{anLbl || "АНАЛИЗИРУЕМ..."}</div>
+          <div style={{ display: "flex", gap: 8 }}>{[1,2,3].map(n => <div key={n} className={`d${n}`} style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff1744" }} />)}</div>
+          <div style={{ width: 260, height: 2, background: "#1a1a2e", borderRadius: 2 }}>
+            <div style={{ width: `${anProg}%`, height: "100%", background: "#ff1744", borderRadius: 2, transition: "width .3s" }} />
           </div>
-          <div style={{fontSize:28,fontWeight:900,color:"#ff1744"}}>{anProg}%</div>
-          {bpm&&<div style={{fontSize:11,color:"#333",letterSpacing:3}}>BPM: <span style={{color:"#ff9100"}}>{bpm.bpm}</span></div>}
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#ff1744" }}>{anProg}%</div>
+          {bpm && <div style={{ fontSize: 11, color: "#333", letterSpacing: 3 }}>BPM: <span style={{ color: "#ff9100" }}>{bpm.bpm}</span></div>}
         </div>
       )}
 
-      {/* ── MODE SELECT ── */}
-      {ph==="modeSelect"&&(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:18,width:"100%",maxWidth:340}}>
-          <div style={{fontSize:11,letterSpacing:4,color:"#444",textTransform:"uppercase"}}>выбери инструмент</div>
-          {bpm&&<div style={{fontSize:12,color:"#ff9100",letterSpacing:3,fontWeight:700,marginTop:-10}}>♩ {bpm.bpm} BPM</div>}
-          <div style={{width:"100%",display:"flex",flexDirection:"column",gap:10}}>
-            {Object.entries(MODES).map(([k,m])=>(
-              <button key={k} onClick={()=>startMode(k)}
-                      style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:"transparent",
-                        border:`1px solid ${m.color}33`,borderRadius:10,color:m.color,textTransform:"uppercase",textAlign:"left"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=m.color+"11"}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span style={{fontSize:26}}>{m.emoji}</span>
-                <div>
-                  <div style={{fontSize:12,fontWeight:700,letterSpacing:3}}>{m.label}</div>
-                  <div style={{fontSize:9,opacity:.5,letterSpacing:1,marginTop:2}}>{m.lanes.map(l=>l.n).join(" · ")}</div>
-                </div>
-                <div style={{marginLeft:"auto",fontSize:14,opacity:.4}}>→</div>
-              </button>
-            ))}
-          </div>
-          <button style={{...S.btn,fontSize:10}} onClick={()=>setPh("lib")}>← библиотека</button>
-        </div>
-      )}
-
-      {/* ── DIFFICULTY ── */}
-      {ph==="diff"&&(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20}}>
-          <div style={{fontSize:11,letterSpacing:5,color:"#444",textTransform:"uppercase"}}>сложность</div>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-12}}>
-            <span>{M.emoji}</span>
-            <span style={{fontSize:10,color:M.color,letterSpacing:2,textTransform:"uppercase"}}>{M.label}</span>
-            {bpm&&<span style={{fontSize:10,color:"#ff9100",letterSpacing:2}}>♩{bpm.bpm}</span>}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:12,width:280}}>
-            {DIFFS.map(d=>(
-              <button key={d.id} onClick={()=>chooseDiff(d)}
-                      style={{padding:"14px 20px",background:"transparent",border:`1px solid ${d.color}44`,borderRadius:8,
-                        color:d.color,fontSize:13,fontWeight:700,letterSpacing:4,textTransform:"uppercase",
-                        display:"flex",justifyContent:"space-between",alignItems:"center"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=d.color+"11"}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+      {ph === "diff" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20, width: "100%", maxWidth: 340 }}>
+          <div style={{ fontSize: 11, letterSpacing: 5, color: "#444", textTransform: "uppercase" }}>сложность</div>
+          {bpm && <div style={{ fontSize: 12, color: "#ff9100", letterSpacing: 3, fontWeight: 700, marginTop: -12 }}>🥁 ♩{bpm.bpm} BPM {isMobile() ? "· 📱 мобайл" : ""}</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+            {Object.entries(DIFFS).map(([id, d]) => (
+              <button key={id} onClick={() => chooseDiff(id)}
+                style={{ padding: "14px 20px", background: "transparent", border: `1px solid ${d.color}44`, borderRadius: 8, color: d.color, fontSize: 13, fontWeight: 700, letterSpacing: 4, textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}
+                onMouseEnter={e => e.currentTarget.style.background = d.color + "11"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <span>{d.label}</span>
-                <span style={{fontSize:9,opacity:.6,letterSpacing:2}}>{d.desc}</span>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 9, opacity: .6, letterSpacing: 2 }}>{d.desc}</div>
+                  <div style={{ fontSize: 9, opacity: .5, marginTop: 2, letterSpacing: 1 }}>
+                    ❤️×{d.lives} · восстановление каждые {d.healThreshold} попаданий
+                  </div>
+                </div>
               </button>
             ))}
           </div>
-          <button style={{...S.btn,fontSize:10}} onClick={()=>setPh("modeSelect")}>← инструмент</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: 2, color: "#ff1744", textTransform: "uppercase" }}>
+              Бесконечные жизни:
+            </div>
+            <label style={{ position: "relative", width: 40, height: 20 }}>
+              <input
+                type="checkbox"
+                checked={infiniteLives}
+                onChange={e => setInfiniteLives(e.target.checked)}
+                style={{
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                }}
+              />
+              <span
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: infiniteLives ? "#ff1744" : "#555",
+                  borderRadius: 10,
+                  transition: "background 0.2s",
+                }}
+              ></span>
+              <span
+                style={{
+                  position: "absolute",
+                  top: 2,
+                  left: infiniteLives ? 22 : 2,
+                  width: 16,
+                  height: 16,
+                  backgroundColor: "#fff",
+                  borderRadius: "50%",
+                  transition: "transform 0.2s",
+                  transform: infiniteLives ? "translateX(20px)" : "translateX(0)",
+                }}
+              ></span>
+            </label>
+          </div>
+          <button style={{ ...S.btn, fontSize: 10 }} onClick={() => setPh("lib")}>← библиотека</button>
         </div>
       )}
 
-      {/* ── COUNTDOWN ── */}
-      {ph==="countdown"&&(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20}}>
-          <div style={{fontSize:11,color:"#333",letterSpacing:3,textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{name}</div>
-          <div key={cd} style={{fontSize:cd==="GO!"?72:96,fontWeight:900,color:cd==="GO!"?"#76ff03":"#fff",
-            textShadow:cd==="GO!"?"0 0 40px #76ff03":"0 0 40px #ff1744",letterSpacing:cd==="GO!"?8:0,
-            animation:"pop .35s cubic-bezier(.175,.885,.32,1.275) forwards",minWidth:140,textAlign:"center"}}>
+      {ph === "countdown" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+          <div style={{ fontSize: 11, color: "#333", letterSpacing: 3, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{name}</div>
+          <div key={cd} style={{ fontSize: cd === "GO!" ? 72 : 96, fontWeight: 900, color: cd === "GO!" ? "#76ff03" : "#fff", textShadow: cd === "GO!" ? "0 0 40px #76ff03" : "0 0 40px #ff1744", letterSpacing: cd === "GO!" ? 8 : 0, animation: "pop .35s cubic-bezier(.175,.885,.32,1.275) forwards", minWidth: 140, textAlign: "center" }}>
             {cd}
           </div>
         </div>
       )}
 
-      {/* ── GAME ── */}
-      {ph==="game"&&(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:"100%",maxWidth:360}}>
-          {/* HUD */}
-          <div style={{display:"flex",gap:32,marginBottom:10,alignItems:"flex-end"}}>
-            <div style={{textAlign:"center"}}><div style={S.pl}>SCORE</div><div style={{fontSize:32,fontWeight:900,color:"#fff",lineHeight:1}}>{score.toLocaleString()}</div></div>
-            <div style={{textAlign:"center"}}><div style={S.pl}>COMBO</div><div style={{fontSize:40,fontWeight:900,lineHeight:1,color:combo>0?"#ff9100":"#1e1e1e"}}>{combo>0?`×${combo}`:"—"}</div></div>
-            <div style={{textAlign:"center"}}><div style={S.pl}>NOTES</div><div style={{fontSize:18,fontWeight:700,color:"#333",lineHeight:1}}>{totalH}/{totalN}</div></div>
+      {ph === "game" && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", maxWidth: 360 }}>
+          <div style={{ display: "flex", gap: 24, marginBottom: 8, alignItems: "flex-end", width: "100%", maxWidth: 320, justifyContent: "space-between" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={S.pl}>SCORE</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1 }}>{score.toLocaleString()}</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={S.pl}>COMBO</div>
+              <div style={{ fontSize: 36, fontWeight: 900, lineHeight: 1, color: combo > 0 ? "#ff9100" : "#1e1e1e" }}>{combo > 0 ? `×${combo}` : "—"}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <div style={S.pl}>HP</div>
+              <HPBar lives={lives} maxLives={5} />
+            </div>
           </div>
-          {/* Badges */}
-          <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap",justifyContent:"center"}}>
-            <span style={{fontSize:9,color:diffRef.current?.color+"88",border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"2px 8px",textTransform:"uppercase",letterSpacing:2}}>{diffRef.current?.label}</span>
-            <span style={{fontSize:9,color:M.color+"77",border:`1px solid ${M.color}22`,borderRadius:4,padding:"2px 8px",textTransform:"uppercase",letterSpacing:2}}>{M.emoji} {M.label}</span>
-            {bpm&&<span style={{fontSize:9,color:"#ff910077",border:"1px solid #ff910022",borderRadius:4,padding:"2px 8px"}}>♩{bpm.bpm}</span>}
-          </div>
-          <div style={S.bar}><div style={{width:`${prog}%`,height:"100%",background:M.color,borderRadius:2,transition:"width .5s"}}/></div>
 
-          {/* Track */}
-          <div style={{position:"relative",width:"100%",maxWidth:320,height:CH,background:"#0d0d14",border:"1px solid #1a1a2e",borderRadius:8,overflow:"hidden"}}>
-            <canvas ref={canRef} width={320} height={CH} style={{display:"block",width:"100%",height:"100%"}}/>
-            {/* Touch / click pads */}
-            <div style={{position:"absolute",left:0,right:0,bottom:0,height:72,display:"flex"}}>
-              {lanes.map((lane,i)=>(
-                <div key={lane.k}
-                     onPointerDown={e=>{e.preventDefault();hit(i);}}
-                     style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
-                       border:"1px solid #1a1a1a",borderBottom:"none",borderRadius:"4px 4px 0 0",
-                       color:pads[i]?"#fff":lane.c+"77",
-                       background:pads[i]?lane.c+"2a":"transparent",
-                       boxShadow:pads[i]?`inset 0 0 20px ${lane.c}33`:"none",
-                       transition:"background .05s,box-shadow .05s",cursor:"pointer",touchAction:"none",
-                       WebkitUserSelect:"none",userSelect:"none"}}>
-                  <div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{lane.l}</div>
-                  <div style={{fontSize:7,letterSpacing:1,opacity:.5,textTransform:"uppercase"}}>{lane.n}</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap", justifyContent: "center" }}>
+            <span style={{ fontSize: 9, color: diff.color + "88", border: `1px solid ${diff.color}33`, borderRadius: 4, padding: "2px 8px", textTransform: "uppercase", letterSpacing: 2 }}>{diff.label}</span>
+            {bpm && <span style={{ fontSize: 9, color: "#ff910077", border: "1px solid #ff910022", borderRadius: 4, padding: "2px 8px" }}>♩{bpm.bpm}</span>}
+            {isMobile() && <span style={{ fontSize: 9, color: "#00e5ff55", border: "1px solid #00e5ff22", borderRadius: 4, padding: "2px 8px" }}>📱</span>}
+          </div>
+          <div style={S.bar}><div style={{ width: `${prog}%`, height: "100%", background: "#ff1744", borderRadius: 2, transition: "width .5s" }} /></div>
+
+          <div style={{ position: "relative", width: "100%", maxWidth: 320, height: CH, background: "#0d0d14", border: "1px solid #1a1a2e", borderRadius: 8, overflow: "hidden", animation: shake ? "shake .4s ease-out" : "none" }}>
+            <canvas ref={canRef} width={320} height={CH} style={{ display: "block", width: "100%", height: "100%" }} />
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 72, display: "flex" }}>
+              {LANES_DEF.map((lane, i) => (
+                <div key={i} onPointerDown={e => { e.preventDefault(); hit(i); }}
+                  style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, border: "1px solid #1a1a1a", borderBottom: "none", borderRadius: "4px 4px 0 0", color: pads[i] ? "#fff" : lane.color + "77", background: pads[i] ? lane.color + "2a" : "transparent", boxShadow: pads[i] ? `inset 0 0 20px ${lane.color}33` : "none", transition: "background .05s,box-shadow .05s", cursor: "pointer", touchAction: "none", WebkitUserSelect: "none", userSelect: "none" }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, lineHeight: 1 }}>{bindings[i]?.key || lane.defKey.toUpperCase()}</div>
+                  <div style={{ fontSize: 7, letterSpacing: 1, opacity: .5, textTransform: "uppercase" }}>{lane.label}</div>
                 </div>
               ))}
             </div>
-            {/* Feedback */}
-            {fb&&<div key={fb.id} style={{position:"absolute",left:0,right:0,top:"36%",display:"flex",justifyContent:"center",
-              fontSize:20,fontWeight:900,letterSpacing:5,textTransform:"uppercase",color:fb.col,
-              textShadow:`0 0 24px ${fb.col}`,animation:"fadeUp .5s ease-out forwards",pointerEvents:"none"}}>{fb.txt}</div>}
-            {/* Pause overlay */}
-            {paused&&!rcd&&(
-              <div style={{position:"absolute",inset:0,background:"#0a0a0fdd",display:"flex",flexDirection:"column",
-                alignItems:"center",justifyContent:"center",gap:20}}>
-                <div style={{fontSize:28,fontWeight:900,letterSpacing:8,color:"#fff",textTransform:"uppercase",textShadow:"0 0 30px #ff1744"}}>ПАУЗА</div>
-                <button onClick={resumeGame} style={{padding:"12px 28px",background:"transparent",border:"1px solid #ff174466",borderRadius:8,color:"#ff1744",fontSize:12,fontWeight:700,letterSpacing:4,textTransform:"uppercase"}}>▶ ПРОДОЛЖИТЬ</button>
+
+            {fb && <div key={fb.id} style={{ position: "absolute", left: 0, right: 0, top: "36%", display: "flex", justifyContent: "center", fontSize: 20, fontWeight: 900, letterSpacing: 5, textTransform: "uppercase", color: fb.col, textShadow: `0 0 24px ${fb.col}`, animation: "fadeUp .5s ease-out forwards", pointerEvents: "none" }}>{fb.txt}</div>}
+            {hpFlash && <div style={{ position: "absolute", inset: 0, background: "#ff174422", pointerEvents: "none", animation: "hpFlash .4s ease-out" }} />}
+            {dead && <div style={{ position: "absolute", inset: 0, background: "#0a0a0fee", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+              <div style={{ fontSize: 48 }}>💀</div>
+              <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 6, color: "#ff1744", textTransform: "uppercase" }}>GAME OVER</div>
+            </div>}
+            {paused && !rcd && !dead && (
+              <div style={{ position: "absolute", inset: 0, background: "#0a0a0fdd", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+                <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: 8, color: "#fff", textTransform: "uppercase", textShadow: "0 0 30px #ff1744" }}>ПАУЗА</div>
+                <button onClick={resumeGame} style={{ padding: "12px 28px", background: "transparent", border: "1px solid #ff174466", borderRadius: 8, color: "#ff1744", fontSize: 12, fontWeight: 700, letterSpacing: 4, textTransform: "uppercase" }}>▶ ПРОДОЛЖИТЬ</button>
               </div>
             )}
-            {rcd&&(
-              <div style={{position:"absolute",inset:0,background:"#0a0a0fbb",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <div key={rcd} style={{fontSize:rcd==="GO!"?72:96,fontWeight:900,color:rcd==="GO!"?"#76ff03":"#fff",
-                  textShadow:rcd==="GO!"?"0 0 40px #76ff03":"0 0 40px #ff1744",
-                  animation:"pop .35s cubic-bezier(.175,.885,.32,1.275) forwards",minWidth:100,textAlign:"center"}}>{rcd}</div>
-              </div>
-            )}
+            {rcd && <div style={{ position: "absolute", inset: 0, background: "#0a0a0fbb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div key={rcd} style={{ fontSize: rcd === "GO!" ? 72 : 96, fontWeight: 900, color: rcd === "GO!" ? "#76ff03" : "#fff", textShadow: rcd === "GO!" ? "0 0 40px #76ff03" : "0 0 40px #ff1744", animation: "pop .35s cubic-bezier(.175,.885,.32,1.275) forwards", minWidth: 100, textAlign: "center" }}>{rcd}</div>
+            </div>}
           </div>
 
-          {/* Lane labels */}
-          <div style={{display:"flex",width:"100%",maxWidth:320,marginTop:4,marginBottom:4}}>
-            {lanes.map(l=><div key={l.k} style={{flex:1,textAlign:"center",fontSize:9,letterSpacing:1,color:l.c+"55",textTransform:"uppercase"}}>{l.n}</div>)}
+          <div style={{ display: "flex", width: "100%", maxWidth: 320, marginTop: 4, marginBottom: 4 }}>
+            {LANES_DEF.map(l => <div key={l.id} style={{ flex: 1, textAlign: "center", fontSize: 9, letterSpacing: 1, color: l.color + "55", textTransform: "uppercase" }}>{l.label}</div>)}
           </div>
 
-          {/* EQ slider */}
-          <div style={{...S.card,width:"100%",maxWidth:320,marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <div style={{fontSize:9,letterSpacing:2,color:"#444",textTransform:"uppercase"}}>{mode==="drums"?"🥁 барабаны ↑ / середина ↓":"🎚 усиление"}</div>
-              <div style={{fontSize:10,fontWeight:700,color:eq>0?"#ff9100":eq<0?"#00e5ff":"#444"}}>{eq>0?"+":""}{eq} dB</div>
+          <div style={{ ...S.card, width: "100%", maxWidth: 320, marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <div style={{ fontSize: 9, letterSpacing: 2, color: "#444", textTransform: "uppercase" }}>🥁 барабаны ↑ / середина ↓</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: eq > 0 ? "#ff9100" : eq < 0 ? "#00e5ff" : "#444" }}>{eq > 0 ? "+" : ""}{eq} dB</div>
             </div>
             <input type="range" min="-6" max="18" step="1" value={eq}
-                   style={{background:`linear-gradient(to right,#00e5ff 0%,#ff1744 ${(eq+6)/24*100}%,#2a2a2a ${(eq+6)/24*100}%,#2a2a2a 100%)`}}
-                   onChange={e=>{const v=+e.target.value;setEq(v);eqRef.current?.set(v);}}/>
+              style={{ background: `linear-gradient(to right,#00e5ff 0%,#ff1744 ${(eq+6)/24*100}%,#2a2a2a ${(eq+6)/24*100}%,#2a2a2a 100%)` }}
+              onChange={e => { const v = +e.target.value; setEq(v); eqNodeRef.current?.set(v); }} />
           </div>
 
-          {/* Controls */}
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
-            <button style={S.btn} onClick={()=>{isPRef.current?resumeGame():pauseGame();}}>{paused?"▶":"⏸"} {paused?"ПРОДОЛЖИТЬ":"ПАУЗА"}</button>
-            <button style={S.btn} onClick={again}>↺ RESTART</button>
-            <button style={S.btn} onClick={stopGame}>■ СТОП</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+            <button style={S.btn} onClick={() => { isPRef.current ? resumeGame() : pauseGame(); }}>{paused ? "▶" : "⏸"}</button>
+            <button style={S.btn} onClick={again}>↺</button>
+            <button style={S.btn} onClick={stopGame}>■</button>
           </div>
-          <div style={{fontSize:9,color:"#1e1e1e",letterSpacing:2,marginTop:8,textAlign:"center"}}>
-            КЛАВИШИ: F G H J · ПРОБЕЛ — пауза
+          <div style={{ fontSize: 9, color: "#1e1e1e", letterSpacing: 2, marginTop: 6, textAlign: "center" }}>
+            {LANES_DEF.map((l, i) => `${bindings[i]?.key || l.defKey} = ${l.label}`).join("  ·  ")} · SPACE = пауза
           </div>
         </div>
       )}
 
-      {/* ── RESULT ── */}
-      {ph==="result"&&(
-        <div style={{textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:18}}>
-          <div style={{fontSize:11,letterSpacing:6,color:"#333",textTransform:"uppercase"}}>результат</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
-            <span style={{fontSize:9,color:diffRef.current?.color+"88",border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"3px 10px",textTransform:"uppercase",letterSpacing:2}}>{diffRef.current?.label}</span>
-            <span style={{fontSize:9,color:M.color+"88",border:`1px solid ${M.color}33`,borderRadius:4,padding:"3px 10px",textTransform:"uppercase",letterSpacing:2}}>{M.emoji} {M.label}</span>
-            {bpm&&<span style={{fontSize:9,color:"#ff910088",border:"1px solid #ff910022",borderRadius:4,padding:"3px 10px"}}>♩{bpm.bpm}</span>}
+      {ph === "result" && (
+        <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+          {dead && <div style={{ fontSize: 11, letterSpacing: 4, color: "#ff1744", textTransform: "uppercase" }}>💀 GAME OVER</div>}
+          {!dead && <div style={{ fontSize: 11, letterSpacing: 6, color: "#333", textTransform: "uppercase" }}>результат</div>}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+            <span style={{ fontSize: 9, color: diff.color + "88", border: `1px solid ${diff.color}33`, borderRadius: 4, padding: "3px 10px", textTransform: "uppercase", letterSpacing: 2 }}>{diff.label}</span>
+            {bpm && <span style={{ fontSize: 9, color: "#ff910088", border: "1px solid #ff910022", borderRadius: 4, padding: "3px 10px" }}>♩{bpm.bpm}</span>}
           </div>
-          <div style={{fontSize:60,fontWeight:900,color:"#fff",textShadow:"0 0 40px #ff1744",lineHeight:1}}>{score.toLocaleString()}</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 44px"}}>
-            {[["ACCURACY",acc+"%"],["MAX COMBO","×"+maxCo],["PERFECT",stats.p],["GOOD",stats.g],["MISS",stats.m],["NOTES",totalN]].map(([l,v])=>(
-              <div key={l}><div style={{fontSize:9,letterSpacing:3,color:"#333",textTransform:"uppercase"}}>{l}</div><div style={{fontSize:22,fontWeight:700,color:"#bbb"}}>{v}</div></div>
+          <div style={{ fontSize: 56, fontWeight: 900, color: "#fff", textShadow: "0 0 40px #ff1744", lineHeight: 1 }}>{score.toLocaleString()}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 40px" }}>
+            {[["ACCURACY", acc + "%"], ["MAX COMBO", "×" + maxCo], ["PERFECT", stats.p], ["GOOD", stats.g], ["MISS", stats.m], ["NOTES", totalN]].map(([l, v]) => (
+              <div key={l}><div style={{ fontSize: 9, letterSpacing: 3, color: "#333", textTransform: "uppercase" }}>{l}</div><div style={{ fontSize: 22, fontWeight: 700, color: "#bbb" }}>{v}</div></div>
             ))}
           </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:4}}>
-            <button style={{...S.btn,borderColor:"#ff174466",color:"#ff1744"}} onClick={again}>↺ ЕЩЁ РАЗ</button>
-            <button style={S.btn} onClick={()=>setPh("modeSelect")}>🎸 ИНСТРУМЕНТ</button>
-            <button style={S.btn} onClick={()=>setPh("diff")}>☰ СЛОЖНОСТЬ</button>
-            <button style={S.btn} onClick={()=>setPh("lib")}>🎵 БИБЛИОТЕКА</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
+            <button style={{ ...S.btn, borderColor: "#ff174466", color: "#ff1744" }} onClick={again}>↺ ЕЩЁ РАЗ</button>
+            <button style={S.btn} onClick={() => setPh("diff")}>☰ СЛОЖНОСТЬ</button>
+            <button style={S.btn} onClick={() => setPh("lib")}>🎵 БИБЛИОТЕКА</button>
           </div>
         </div>
       )}
@@ -749,7 +1230,7 @@ function App(){
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
