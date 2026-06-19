@@ -1,927 +1,755 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>DRUM HERO</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-        body { background:#0a0a0f; overflow-x:hidden; touch-action:manipulation; }
-        @keyframes fadeUp {
-            0%   { opacity:1; transform:translateY(0) scale(1); }
-            100% { opacity:0; transform:translateY(-36px) scale(1.15); }
-        }
-        @keyframes countPop {
-            0%   { opacity:0; transform:scale(0.4); }
-            40%  { opacity:1; transform:scale(1.15); }
-            70%  { transform:scale(0.95); }
-            100% { opacity:1; transform:scale(1); }
-        }
-        @keyframes pulse {
-            0%,100% { opacity:0.3; }
-            50%      { opacity:1; }
-        }
-        @keyframes instrReveal {
-            0%   { opacity:0; transform:translateY(16px); }
-            100% { opacity:1; transform:translateY(0); }
-        }
-        @keyframes instrPing {
-            0%   { transform:scale(1); opacity:1; }
-            60%  { transform:scale(1.18); opacity:0.6; }
-            100% { transform:scale(1); opacity:1; }
-        }
-        .dot1 { animation:pulse 1s ease-in-out infinite 0s; }
-        .dot2 { animation:pulse 1s ease-in-out infinite 0.2s; }
-        .dot3 { animation:pulse 1s ease-in-out infinite 0.4s; }
-        button { cursor:pointer; font-family:'Courier New',monospace; }
-        button:hover { opacity:0.85; }
-        .touch-pad { transition:background 0.04s,box-shadow 0.04s; user-select:none; -webkit-user-select:none; }
-        .touch-pad:active { opacity:0.75; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>DRUM HERO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0a0a0f;overflow-x:hidden;touch-action:manipulation;-webkit-text-size-adjust:100%}
+@keyframes fadeUp{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-32px)}}
+@keyframes pop{0%{opacity:0;transform:scale(0.4)}50%{transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.d1{animation:pulse 1s infinite 0s}.d2{animation:pulse 1s infinite .2s}.d3{animation:pulse 1s infinite .4s}
+button{cursor:pointer;font-family:'Courier New',monospace;-webkit-appearance:none}
+input[type=range]{-webkit-appearance:none;height:3px;border-radius:2px;outline:none;cursor:pointer;width:100%}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#ff1744}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#ff1744;border:none}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+</style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+const {useState,useEffect,useRef,useCallback} = React;
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // MODE DEFINITIONS — improved with tonal peak filter & clustering windows
-    // ═══════════════════════════════════════════════════════════════════════════════
-    const MODES = {
-        drums: {
-            label:"Барабаны", emoji:"🥁", color:"#ff1744",
-            lanes:[
-                { key:"f", label:"F", name:"Kick",   color:"#ff1744" },
-                { key:"g", label:"G", name:"Cymbal", color:"#ff9100" },
-                { key:"h", label:"H", name:"Snare",  color:"#76ff03" },
-                { key:"j", label:"J", name:"Hi-Hat", color:"#00e5ff" },
-            ],
-            bandRanges: [[60,150],[150,350],[350,1200],[6000,18000]],
-            fluxThresh: 1.5,
-            deltaThresh: 1.3,
-            minEner: 0.008,
-            dedupSec: 0.06,
-            clusterWindowSec: 0.06,   // keep tight for drums
-            tonalPeakRatio: 0,         // no tonal filter
-        },
-        guitar: {
-            label:"Гитара / Бас", emoji:"🎸", color:"#aa00ff",
-            lanes:[
-                { key:"f", label:"F", name:"Низкие",    color:"#ff1744" },
-                { key:"g", label:"G", name:"Низ-Сред",  color:"#ff9100" },
-                { key:"h", label:"H", name:"Верх-Сред", color:"#76ff03" },
-                { key:"j", label:"J", name:"Высокие",   color:"#00e5ff" },
-            ],
-            bandRanges: [[80,300],[300,800],[800,2500],[2500,8000]],
-            fluxThresh: 1.2,
-            deltaThresh: 1.08,
-            minEner: 0.003,
-            dedupSec: 0.04,
-            clusterWindowSec: 0.10,    // merge close notes into strongest
-            tonalPeakRatio: 2.8,       // require clear spectral peak
-        },
-        synth: {
-            label:"Синт / Мелодия", emoji:"🎹", color:"#00e5ff",
-            lanes:[
-                { key:"f", label:"F", name:"Низкие",    color:"#ff1744" },
-                { key:"g", label:"G", name:"Низ-Сред",  color:"#ff9100" },
-                { key:"h", label:"H", name:"Верх-Сред", color:"#76ff03" },
-                { key:"j", label:"J", name:"Высокие",   color:"#00e5ff" },
-            ],
-            bandRanges: [[200,500],[500,1200],[1200,3500],[3500,12000]],
-            fluxThresh: 1.15,
-            deltaThresh: 1.05,
-            minEner: 0.002,
-            dedupSec: 0.04,
-            clusterWindowSec: 0.10,
-            tonalPeakRatio: 2.5,
-        },
+// ── Config ──────────────────────────────────────────────────────
+const MODES = {
+  drums: {
+    label:"Барабаны",emoji:"🥁",color:"#ff1744",eqMode:"drums",
+    lanes:[{k:"f",l:"F",n:"Kick",c:"#ff1744"},{k:"g",l:"G",n:"Snare",c:"#ff9100"},{k:"h",l:"H",n:"Hi-Hat",c:"#76ff03"},{k:"j",l:"J",n:"Cymbal",c:"#00e5ff"}],
+    bands:[[60,150],[200,500],[6000,18000],[150,400]],thr:1.5,dthr:1.3,min:0.008,dup:0.06,
+  },
+  melody: {
+    label:"Мелодия",emoji:"🎸",color:"#aa00ff",eqMode:"generic",
+    lanes:[{k:"f",l:"F",n:"Низ",c:"#ff1744"},{k:"g",l:"G",n:"Низ-Ср",c:"#ff9100"},{k:"h",l:"H",n:"Вер-Ср",c:"#76ff03"},{k:"j",l:"J",n:"Высок",c:"#00e5ff"}],
+    bands:[[80,300],[300,800],[800,2500],[2500,8000]],thr:1.2,dthr:1.08,min:0.003,dup:0.04,
+  },
+  vocals: {
+    label:"Вокал",emoji:"🎤",color:"#00e5ff",eqMode:"generic",
+    lanes:[{k:"f",l:"F",n:"Низ",c:"#ff1744"},{k:"g",l:"G",n:"Низ-Ср",c:"#ff9100"},{k:"h",l:"H",n:"Вер-Ср",c:"#76ff03"},{k:"j",l:"J",n:"Высок",c:"#00e5ff"}],
+    bands:[[200,500],[500,1200],[1200,3500],[3500,12000]],thr:1.15,dthr:1.05,min:0.002,dup:0.04,
+  },
+};
+const DIFFS=[
+  {id:"easy",  label:"EASY",  keep:1/3,hitMs:400,goodMs:600,color:"#76ff03",desc:"каждая 3-я нота"},
+  {id:"medium",label:"MEDIUM",keep:1/2,hitMs:220,goodMs:350,color:"#ff9100",desc:"каждая 2-я нота"},
+  {id:"hard",  label:"HARD",  keep:1,  hitMs:160,goodMs:260,color:"#ff1744",desc:"все ноты"},
+];
+const TH=28,HZY=82,SPD=220,CH=520,DLY=3.0;
+
+// ── IndexedDB ────────────────────────────────────────────────────
+const DB={name:"DrumHero7",ver:1,store:"tracks"};
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB.name,DB.ver);
+    r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(DB.store)) d.createObjectStore(DB.store,{keyPath:"hash"});};
+    r.onsuccess=e=>res(e.target.result);r.onerror=e=>rej(e.target.error);
+  });
+}
+const dbOp=(mode,fn)=>openDB().then(db=>new Promise((res,rej)=>{const tx=db.transaction(DB.store,mode);fn(tx.objectStore(DB.store),res,rej);}));
+const dbGet=h=>dbOp("readonly",(s,r,j)=>{const q=s.get(h);q.onsuccess=e=>r(e.target.result||null);q.onerror=j;});
+const dbPut=rec=>dbOp("readwrite",(s,r,j)=>{const q=s.put(rec);q.onsuccess=()=>r();q.onerror=j;});
+const dbAll=()=>dbOp("readonly",(s,r,j)=>{const q=s.getAll();q.onsuccess=e=>r(e.target.result||[]);q.onerror=j;});
+const dbDel=h=>dbOp("readwrite",(s,r,j)=>{const q=s.delete(h);q.onsuccess=()=>r();q.onerror=j;});
+
+async function sha256(ab){
+  const b=await crypto.subtle.digest("SHA-256",ab);
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+
+// ── FFT ─────────────────────────────────────────────────────────
+function fft(re,im,n){
+  let j=0;
+  for(let i=1;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]];}}
+  for(let l=2;l<=n;l<<=1){const a=(-2*Math.PI)/l,wr=Math.cos(a),wi=Math.sin(a);for(let i=0;i<n;i+=l){let cr=1,ci=0;for(let k=0;k<l/2;k++){const ur=re[i+k],ui=im[i+k],vr=re[i+k+l/2]*cr-im[i+k+l/2]*ci,vi=re[i+k+l/2]*ci+im[i+k+l/2]*cr;re[i+k]=ur+vr;im[i+k]=ui+vi;re[i+k+l/2]=ur-vr;im[i+k+l/2]=ui-vi;const nr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nr;}}}
+}
+function mag(sig,N){
+  const h=N/2,m=new Float32Array(h),re=new Float32Array(sig),im=new Float32Array(N);
+  fft(re,im,N);for(let i=0;i<h;i++)m[i]=Math.sqrt(re[i]*re[i]+im[i]*im[i])/N;return m;
+}
+
+// ── BPM ─────────────────────────────────────────────────────────
+function getBPM(buf){
+  const sr=buf.sampleRate,n=buf.numberOfChannels,len=Math.min(buf.length,sr*60);
+  const mono=new Float32Array(len);
+  for(let c=0;c<n;c++){const ch=buf.getChannelData(c);for(let i=0;i<len;i++)mono[i]+=ch[i]/n;}
+  const hop=Math.floor(sr*.01),nh=Math.floor(len/hop),env=new Float32Array(nh);
+  for(let h=0;h<nh;h++){let s=0;for(let i=0;i<hop;i++){const v=mono[h*hop+i]||0;s+=v*v;}env[h]=Math.sqrt(s/hop);}
+  const flux=new Float32Array(nh);for(let h=1;h<nh;h++){const d=env[h]-env[h-1];flux[h]=d>0?d:0;}
+  const hd=hop/sr,lmin=Math.floor(60/(200*hd)),lmax=Math.ceil(60/(60*hd));
+  let bl=lmin,bc=-Infinity;
+  for(let l=lmin;l<=lmax;l++){let c=0;const nn=nh-l;for(let i=0;i<nn;i++)c+=flux[i]*flux[i+l];c/=nn;if(c>bc){bc=c;bl=l;}}
+  const bpm=Math.round((60/(bl*hd))*2)/2;
+  return{bpm,beat:60/bpm};
+}
+
+// ── Quantize ─────────────────────────────────────────────────────
+function quantize(evts,beat){
+  const step=beat/2,phase=evts.length>0?evts[0].time%step:0;
+  return evts.map(ev=>({...ev,time:Math.max(0,Math.round((ev.time-phase)/step)*step+phase)}));
+}
+
+// ── Onset detection ──────────────────────────────────────────────
+async function detect(buf,mode,onProg){
+  const sr=buf.sampleRate,nc=buf.numberOfChannels,len=buf.length;
+  const mono=new Float32Array(len);
+  for(let c=0;c<nc;c++){const ch=buf.getChannelData(c);for(let i=0;i<len;i++)mono[i]+=ch[i]/nc;}
+  const N=2048,hop=Math.floor(sr*.02),nf=Math.floor((len-N)/hop)+1,fr=sr/N;
+  const {bands,thr,dthr,min,dup}=mode,nb=bands.length;
+  const bi=bands.map(([lo,hi])=>[Math.max(0,Math.floor(lo/fr)),Math.min(N/2-1,Math.ceil(hi/fr))]);
+  const hann=new Float32Array(N);for(let i=0;i<N;i++)hann[i]=.5*(1-Math.cos(2*Math.PI*i/N));
+  const evts=[],pe=new Float32Array(nb),hist=Array.from({length:nb},()=>[]);
+  for(let fi=0;fi<nf;fi++){
+    const st=fi*hop,w=new Float32Array(N);
+    for(let i=0;i<N;i++)w[i]=(st+i<len?mono[st+i]:0)*hann[i];
+    const m=mag(w,N),t=(st+N/2)/sr;
+    for(let b=0;b<nb;b++){
+      const[lo,hi]=bi[b];let e=0;
+      for(let j=lo;j<=hi;j++)e+=m[j]*m[j];
+      e=Math.sqrt(e/Math.max(hi-lo+1,1));
+      const h=hist[b];h.push(e);if(h.length>50)h.shift();
+      const avg=h.reduce((a,v)=>a+v,0)/h.length;
+      if(e>avg*thr&&e>pe[b]*dthr&&e>min)evts.push({time:t,band:b,energy:e});
+      pe[b]=e;
+    }
+    if(fi%600===0&&onProg)onProg(Math.floor(fi/nf*100));
+  }
+  const out=[],lt=new Array(nb).fill(-Infinity);
+  for(const ev of evts.sort((a,b)=>a.time-b.time)){
+    if(ev.time-lt[ev.band]>dup){out.push({time:ev.time,lane:ev.band});lt[ev.band]=ev.time;}
+  }
+  return out;
+}
+
+// ── Diff filter ──────────────────────────────────────────────────
+function applyDiff(evts,keep){
+  if(keep>=1)return evts;
+  const pl=[[],[],[],[]];evts.forEach((e,i)=>pl[e.lane].push(i));
+  const kept=new Set();pl.forEach(ix=>{const s=Math.round(1/keep);ix.forEach((x,p)=>{if(p%s===0)kept.add(x);});});
+  return evts.filter((_,i)=>kept.has(i));
+}
+
+// ── Click sound ──────────────────────────────────────────────────
+function click(ctx,t=0){
+  const sz=Math.floor(ctx.sampleRate*.08),b=ctx.createBuffer(1,sz,ctx.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<sz;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/sz,4);
+  const s=ctx.createBufferSource();s.buffer=b;
+  const f=ctx.createBiquadFilter();f.type="highpass";f.frequency.value=7000;
+  const g=ctx.createGain();g.gain.value=.6;
+  s.connect(f);f.connect(g);g.connect(ctx.destination);s.start(ctx.currentTime+t);
+}
+
+// ── EQ ───────────────────────────────────────────────────────────
+function makeEQ(ctx,mode,db){
+  if(mode==="drums"){
+    const hp=ctx.createBiquadFilter();hp.type="highpass";hp.frequency.value=30;
+    const n1=ctx.createBiquadFilter();n1.type="peaking";n1.frequency.value=600;n1.Q.value=1;n1.gain.value=0;
+    const n2=ctx.createBiquadFilter();n2.type="peaking";n2.frequency.value=1500;n2.Q.value=1;n2.gain.value=0;
+    const k=ctx.createBiquadFilter();k.type="peaking";k.frequency.value=80;k.Q.value=1.5;k.gain.value=0;
+    const sn=ctx.createBiquadFilter();sn.type="peaking";sn.frequency.value=250;sn.Q.value=2;sn.gain.value=0;
+    const ht=ctx.createBiquadFilter();ht.type="highshelf";ht.frequency.value=8000;ht.gain.value=0;
+    [hp,n1,n2,k,sn].forEach((x,i,a)=>{if(a[i+1])x.connect(a[i+1]);});sn.connect(ht);
+    const set=v=>{n1.gain.value=-v*.6;n2.gain.value=-v*.5;k.gain.value=v;sn.gain.value=v*.8;ht.gain.value=v*.7;};
+    set(db);return{input:hp,output:ht,set};
+  }
+  const f=ctx.createBiquadFilter();f.type="peaking";f.frequency.value=1000;f.Q.value=1;f.gain.value=db;
+  return{input:f,output:f,set:v=>f.gain.value=v};
+}
+
+// ── Canvas roundRect ─────────────────────────────────────────────
+function rr(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+const fmtSz=b=>b>1e9?(b/1e9).toFixed(1)+"GB":b>1e6?(b/1e6).toFixed(0)+"MB":(b/1024).toFixed(0)+"KB";
+const fmtDur=s=>s?Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0"):"";
+const etaStr=d=>{const s=Math.ceil(d*3.5);return s<60?`~${s} сек`:`~${Math.ceil(s/60)} мин`;};
+
+// ══════════════════════════════════════════════════════════════════
+// COMPONENT
+// ══════════════════════════════════════════════════════════════════
+function App(){
+  // phases: lib | upload | analyzing | modeSelect | diff | countdown | game | result
+  const [ph,setPh]   = useState("lib");
+  const [lib,setLib] = useState([]);
+  const [name,setName]   = useState("");
+  const [mode,setMode]   = useState("drums");
+  const [evts,setEvts]   = useState([]);
+  const [score,setScore] = useState(0);
+  const [combo,setCombo] = useState(0);
+  const [maxCo,setMaxCo] = useState(0);
+  const [stats,setStats] = useState({p:0,g:0,m:0});
+  const [fb,setFb]       = useState(null);
+  const [pads,setPads]   = useState([0,0,0,0]); // 0=off,1=on
+  const [prog,setProg]   = useState(0);
+  const [anProg,setAnProg] = useState(0);
+  const [anLbl,setAnLbl]   = useState("");
+  const [cd,setCd]         = useState(null);
+  const [bpm,setBpm]       = useState(null);
+  const [eq,setEq]         = useState(0);
+  const [paused,setPaused] = useState(false);
+  const [rcd,setRcd]       = useState(null); // resume countdown
+
+  const canRef  = useRef(null);
+  const actxRef = useRef(null);
+  const srcRef  = useRef(null);
+  const bufRef  = useRef(null);   // full audio buffer
+  const t0Ref   = useRef(null);   // start time
+  const pauseRef= useRef(null);   // paused-at game time
+  const evsRef  = useRef([]);
+  const tsRef   = useRef([]);     // tile states
+  const rafRef  = useRef(null);
+  const scRef   = useRef(0);
+  const coRef   = useRef(0);
+  const mxRef   = useRef(0);
+  const stRef   = useRef({p:0,g:0,m:0});
+  const fbTRef  = useRef(null);
+  const fileRef = useRef(null);
+  const playRef = useRef(false);
+  const isPRef  = useRef(false);
+  const diffRef = useRef(null);
+  const modeRef = useRef("drums");
+  const eqRef   = useRef(null);   // EQ node chain
+  const eqDbRef = useRef(0);
+  const bpmRef  = useRef(null);
+
+  useEffect(()=>{evsRef.current=evts;},[evts]);
+  useEffect(()=>{modeRef.current=mode;},[mode]);
+  useEffect(()=>{eqDbRef.current=eq;},[eq]);
+  useEffect(()=>{bpmRef.current=bpm;},[bpm]);
+
+  // Load library
+  useEffect(()=>{
+    dbAll().then(r=>setLib(r.map(({hash,name,duration,bpm,size,date})=>({hash,name,duration,bpm,size,date})).sort((a,b)=>b.date-a.date))).catch(()=>{});
+  },[]);
+
+  const showFb=useCallback((txt,col)=>{
+    setFb({txt,col,id:Date.now()});
+    clearTimeout(fbTRef.current);
+    fbTRef.current=setTimeout(()=>setFb(null),500);
+  },[]);
+
+  // ── Decode file & analyze ────────────────────────────────────
+  const processFile=async(file)=>{
+    if(!file)return;
+    // iOS: accept any audio
+    const n=file.name.replace(/\.[^.]+$/,"");
+    setName(n);setPh("analyzing");setAnProg(0);setAnLbl("ДЕКОДИРУЕМ АУДИО...");
+    const ab=await file.arrayBuffer();
+    const hash=await sha256(ab);
+    let actx=actxRef.current;
+    if(!actx||actx.state==="closed"){actx=new AudioContext();actxRef.current=actx;}
+    // resume on iOS (requires user gesture, which we have)
+    if(actx.state==="suspended")await actx.resume();
+
+    // Check cache
+    const cached=await dbGet(hash).catch(()=>null);
+    if(cached){
+      setAnLbl("ИЗ КЭША ⚡");setAnProg(100);
+      bufRef.current=await actx.decodeAudioData(cached.audio.slice(0));
+      const br=cached.bpm?{bpm:cached.bpm,beat:60/cached.bpm}:getBPM(bufRef.current);
+      setBpm(br);bpmRef.current=br;
+      setTimeout(()=>setPh("modeSelect"),300);
+      return;
+    }
+    try{
+      setAnLbl("ДЕКОДИРУЕМ АУДИО...");
+      const decoded=await actx.decodeAudioData(ab.slice(0));
+      bufRef.current=decoded;
+      setAnLbl("ОПРЕДЕЛЯЕМ BPM...");setAnProg(20);
+      const br=getBPM(decoded);setBpm(br);bpmRef.current=br;
+      // Save to cache (store original arraybuffer)
+      setAnLbl("СОХРАНЯЕМ В КЭШ...");setAnProg(90);
+      const sz=ab.byteLength;
+      await dbPut({hash,name:n,audio:ab,duration:decoded.duration,bpm:br.bpm,size:sz,date:Date.now()});
+      setLib(prev=>[{hash,name:n,duration:decoded.duration,bpm:br.bpm,size:sz,date:Date.now()},...prev.filter(r=>r.hash!==hash)]);
+      setAnProg(100);
+      setTimeout(()=>setPh("modeSelect"),300);
+    }catch(e){
+      console.error(e);setPh("upload");
+      alert("Не удалось декодировать файл: "+e.message);
+    }
+  };
+
+  // Load from library
+  const loadLib=async(rec)=>{
+    setName(rec.name);setPh("analyzing");setAnProg(0);setAnLbl("ЗАГРУЖАЕМ...");
+    let actx=actxRef.current;
+    if(!actx||actx.state==="closed"){actx=new AudioContext();actxRef.current=actx;}
+    if(actx.state==="suspended")await actx.resume();
+    try{
+      const stored=await dbGet(rec.hash);
+      if(!stored)throw new Error("Не найдено в кэше");
+      bufRef.current=await actx.decodeAudioData(stored.audio.slice(0));
+      const br=rec.bpm?{bpm:rec.bpm,beat:60/rec.bpm}:getBPM(bufRef.current);
+      setBpm(br);bpmRef.current=br;setAnProg(100);
+      setTimeout(()=>setPh("modeSelect"),300);
+    }catch(e){setPh("lib");alert("Ошибка: "+e.message);}
+  };
+
+  // ── Analyze + start game ─────────────────────────────────────
+  const startMode=async(m)=>{
+    setMode(m);modeRef.current=m;
+    setPh("analyzing");setAnProg(0);setAnLbl("FFT АНАЛИЗ...");
+    const raw=await detect(bufRef.current,MODES[m],p=>{
+      setAnProg(p);
+      if(p<40)setAnLbl("FFT АНАЛИЗ...");
+      else if(p<75)setAnLbl("ПОИСК ОНСЕТОВ...");
+      else setAnLbl("КВАНТИЗАЦИЯ...");
+    });
+    const br=bpmRef.current||getBPM(bufRef.current);
+    setBpm(br);bpmRef.current=br;
+    evsRef.current=quantize(raw,br.beat);
+    setAnProg(100);
+    setTimeout(()=>setPh("diff"),300);
+  };
+
+  const chooseDiff=d=>{
+    diffRef.current=d;
+    const filtered=applyDiff(evsRef.current,d.keep).map(e=>({...e,time:e.time+DLY}));
+    setEvts(filtered);tsRef.current=filtered.map(()=>"p");
+    startCD();
+  };
+
+  const startCD=()=>{
+    setPh("countdown");setCd(3);
+    const a=actxRef.current;
+    [.3,1.3,2.3].forEach(t=>click(a,t));
+    setTimeout(()=>setCd(2),1000);setTimeout(()=>setCd(1),2000);
+    setTimeout(()=>setCd("GO!"),3000);setTimeout(()=>setPh("game"),3600);
+  };
+
+  // Resume with countdown overlay
+  const doResumeCD=useCallback(()=>{
+    const a=actxRef.current;
+    [.3,1.3,2.3].forEach(t=>click(a,t));
+    setRcd(3);setTimeout(()=>setRcd(2),1000);setTimeout(()=>setRcd(1),2000);
+    setTimeout(()=>setRcd("GO!"),3000);
+    setTimeout(()=>{
+      setRcd(null);
+      const at=pauseRef.current,src=a.createBufferSource();
+      src.buffer=bufRef.current;
+      const eq=makeEQ(a,MODES[modeRef.current].eqMode,eqDbRef.current);
+      eqRef.current=eq;eq.output.connect(a.destination);src.connect(eq.input);
+      srcRef.current=src;t0Ref.current=a.currentTime-at;
+      src.start(0,Math.max(0,at-DLY));
+      src.onended=()=>{if(playRef.current){playRef.current=false;setTimeout(()=>setPh("result"),500);}};
+      playRef.current=true;isPRef.current=false;setPaused(false);
+    },3600);
+  },[]);
+
+  // Start audio
+  const startAudio=useCallback(()=>{
+    if(!bufRef.current||!actxRef.current)return;
+    scRef.current=0;coRef.current=0;mxRef.current=0;stRef.current={p:0,g:0,m:0};
+    setScore(0);setCombo(0);setMaxCo(0);setStats({p:0,g:0,m:0});
+    tsRef.current=evsRef.current.map(()=>"p");
+    playRef.current=true;isPRef.current=false;setPaused(false);
+    const a=actxRef.current;
+    if(a.state==="suspended")a.resume();
+    const eq=makeEQ(a,MODES[modeRef.current].eqMode,eqDbRef.current);
+    eqRef.current=eq;eq.output.connect(a.destination);
+    const src=a.createBufferSource();src.buffer=bufRef.current;src.connect(eq.input);
+    srcRef.current=src;t0Ref.current=a.currentTime;
+    src.start(a.currentTime+DLY);
+    src.onended=()=>{if(playRef.current){playRef.current=false;setTimeout(()=>setPh("result"),500);}};
+  },[]);
+
+  useEffect(()=>{if(ph==="game"&&!isPRef.current)setTimeout(()=>startAudio(),100);},[ph,startAudio]);
+
+  // Pause / Resume
+  const pauseGame=useCallback(()=>{
+    if(!playRef.current||isPRef.current)return;
+    pauseRef.current=actxRef.current.currentTime-t0Ref.current;
+    isPRef.current=true;playRef.current=false;setPaused(true);
+    try{srcRef.current?.stop();}catch{}
+  },[]);
+  const resumeGame=useCallback(()=>{if(!isPRef.current)return;doResumeCD();},[doResumeCD]);
+
+  useEffect(()=>{
+    if(ph!=="game")return;
+    const h=e=>{if(e.code==="Space"){e.preventDefault();isPRef.current?resumeGame():pauseGame();}};
+    window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);
+  },[ph,pauseGame,resumeGame]);
+
+  // ── Canvas render loop ────────────────────────────────────────
+  useEffect(()=>{
+    if(ph!=="game")return;
+    const cv=canRef.current;if(!cv)return;
+    const ctx=cv.getContext("2d"),W=cv.width,H=cv.height,lw=W/4,hy=H*(HZY/100);
+    const lanes=MODES[modeRef.current].lanes;
+    const draw=()=>{
+      const now=(actxRef.current&&t0Ref.current!=null&&!isPRef.current)
+        ?actxRef.current.currentTime-t0Ref.current:(pauseRef.current||0);
+      const dur=(bufRef.current?.duration||1)+DLY;
+      setProg(Math.min(now/dur*100,100));
+      ctx.fillStyle="#0d0d14";ctx.fillRect(0,0,W,H);
+      // BPM grid
+      if(bpmRef.current){
+        const bd=bpmRef.current.beat;ctx.strokeStyle="#ffffff07";ctx.lineWidth=1;
+        for(let bt=Math.ceil((now-H/SPD)/bd)*bd;bt<now+1;bt+=bd/2){
+          const y=hy-(bt-now)*SPD;if(y<0||y>H)continue;
+          ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+        }
+      }
+      // Lane dividers
+      for(let i=1;i<4;i++){ctx.strokeStyle="#1a1a2e";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(i*lw,0);ctx.lineTo(i*lw,H);ctx.stroke();}
+      // Tiles
+      evsRef.current.forEach((ev,i)=>{
+        const st=tsRef.current[i];if(st==="h")return;
+        const y=hy-(ev.time-now)*SPD;if(y<-TH-10||y>H+10)return;
+        if(y>hy+TH*2&&st==="p"&&!isPRef.current){
+          tsRef.current[i]="m";coRef.current=0;setCombo(0);stRef.current.m++;setStats({...stRef.current});
+        }
+        const x=ev.lane*lw,col=lanes[ev.lane]?.c||"#fff";
+        ctx.globalAlpha=st==="m"?.15:1;
+        if(st==="p"){const g=ctx.createRadialGradient(x+lw/2,y+TH/2,2,x+lw/2,y+TH/2,lw*.8);g.addColorStop(0,col+"44");g.addColorStop(1,"transparent");ctx.fillStyle=g;ctx.fillRect(x-10,y-10,lw+20,TH+20);}
+        ctx.fillStyle=col;rr(ctx,x+4,y,lw-8,TH,6);ctx.fill();
+        ctx.strokeStyle="#ffffff88";ctx.lineWidth=1.5;ctx.stroke();
+        ctx.fillStyle="#ffffff2e";rr(ctx,x+4,y,lw-8,TH/3,6);ctx.fill();
+        ctx.globalAlpha=1;
+      });
+      // Hit line
+      const mc=MODES[modeRef.current].color;
+      ctx.strokeStyle=mc+"66";ctx.lineWidth=2;ctx.shadowColor=mc;ctx.shadowBlur=12;
+      ctx.beginPath();ctx.moveTo(0,hy);ctx.lineTo(W,hy);ctx.stroke();ctx.shadowBlur=0;
+      rafRef.current=requestAnimationFrame(draw);
     };
+    rafRef.current=requestAnimationFrame(draw);
+    return()=>{cancelAnimationFrame(rafRef.current);};
+  },[ph]);
 
-    const DIFFICULTIES = [
-        { id:"easy",   label:"EASY",   keep:1/3, hitMs:400, goodMs:600, color:"#76ff03", desc:"каждая 3-я нота" },
-        { id:"medium", label:"MEDIUM", keep:1/2, hitMs:220, goodMs:350, color:"#ff9100", desc:"каждая 2-я нота" },
-        { id:"hard",   label:"HARD",   keep:1,   hitMs:160, goodMs:260, color:"#ff1744", desc:"все ноты" },
-    ];
+  // ── Hit handler ───────────────────────────────────────────────
+  const hit=useCallback(li=>{
+    setPads(prev=>{const n=[...prev];n[li]=1;return n;});
+    setTimeout(()=>setPads(prev=>{const n=[...prev];n[li]=0;return n;}),100);
+    if(!playRef.current||!actxRef.current||isPRef.current)return;
+    const now=actxRef.current.currentTime-t0Ref.current,diff=diffRef.current;
+    let best=null,bd=Infinity;
+    evsRef.current.forEach((ev,i)=>{
+      if(ev.lane!==li||tsRef.current[i]!=="p")return;
+      const d=Math.abs(ev.time-now)*1000;if(d<bd){bd=d;best=i;}
+    });
+    if(best!==null&&bd<=diff.goodMs){
+      tsRef.current[best]="h";coRef.current++;
+      if(coRef.current>mxRef.current){mxRef.current=coRef.current;setMaxCo(mxRef.current);}
+      setCombo(coRef.current);
+      const mult=Math.min(Math.floor(coRef.current/5)+1,4);
+      if(bd<=diff.hitMs){scRef.current+=100*mult;setScore(scRef.current);stRef.current.p++;setStats({...stRef.current});showFb("PERFECT","#76ff03");}
+      else{scRef.current+=50*mult;setScore(scRef.current);stRef.current.g++;setStats({...stRef.current});showFb("GOOD","#00e5ff");}
+    }else{coRef.current=0;setCombo(0);showFb("MISS","#ff1744");}
+  },[showFb]);
 
-    const TILE_HEIGHT = 28;
-    const HIT_ZONE_Y  = 82;
-    const TILE_SPEED  = 220;
-    const CANVAS_H    = 520;
+  // Keyboard (F G H J)
+  useEffect(()=>{
+    if(ph!=="game")return;
+    const map={'KeyF':0,'KeyG':1,'KeyH':2,'KeyJ':3};
+    const h=e=>{if(e.code==="Space")return;const l=map[e.code];if(l===undefined)return;e.preventDefault();hit(l);};
+    window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);
+  },[ph,hit]);
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // FFT
-    // ═══════════════════════════════════════════════════════════════════════════════
-    function fftInPlace(re, im, n) {
-        let j=0;
-        for (let i=1;i<n;i++){
-            let bit=n>>1;
-            for(;j&bit;bit>>=1) j^=bit;
-            j^=bit;
-            if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]];}
-        }
-        for(let len=2;len<=n;len<<=1){
-            const ang=(-2*Math.PI)/len,wRe=Math.cos(ang),wIm=Math.sin(ang);
-            for(let i=0;i<n;i+=len){
-                let cRe=1,cIm=0;
-                for(let k=0;k<len/2;k++){
-                    const uRe=re[i+k],uIm=im[i+k];
-                    const vRe=re[i+k+len/2]*cRe-im[i+k+len/2]*cIm;
-                    const vIm=re[i+k+len/2]*cIm+im[i+k+len/2]*cRe;
-                    re[i+k]=uRe+vRe;im[i+k]=uIm+vIm;
-                    re[i+k+len/2]=uRe-vRe;im[i+k+len/2]=uIm-vIm;
-                    const nr=cRe*wRe-cIm*wIm;cIm=cRe*wIm+cIm*wRe;cRe=nr;
-                }
-            }
-        }
-    }
-    function computeFFTMag(signal,N){
-        const half=N/2,mag=new Float32Array(half);
-        const real=new Float32Array(signal),imag=new Float32Array(N);
-        fftInPlace(real,imag,N);
-        for(let i=0;i<half;i++) mag[i]=Math.sqrt(real[i]*real[i]+imag[i]*imag[i])/N;
-        return mag;
-    }
+  const stopGame=useCallback(()=>{
+    playRef.current=false;isPRef.current=false;
+    try{srcRef.current?.stop();}catch{}
+    cancelAnimationFrame(rafRef.current);setPh("result");
+  },[]);
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // TONAL PEAK CHECK – used for guitar/synth to suppress drums
-    // ═══════════════════════════════════════════════════════════════════════════════
-    function hasTonalPeak(mag, lo, hi, ratio) {
-        let sum = 0, maxVal = 0, maxIdx = lo;
-        for (let i = lo; i <= hi; i++) {
-            sum += mag[i];
-            if (mag[i] > maxVal) { maxVal = mag[i]; maxIdx = i; }
-        }
-        const avg = sum / (hi - lo + 1);
-        if (maxVal < avg * ratio) return false;
-        // check that neighbours are significantly lower -> sharp peak
-        const left = (maxIdx > lo) ? mag[maxIdx-1] : 0;
-        const right = (maxIdx < hi) ? mag[maxIdx+1] : 0;
-        if (left > maxVal * 0.7 || right > maxVal * 0.7) return false;
-        return true;
-    }
+  const again=useCallback(()=>{
+    try{srcRef.current?.stop();}catch{}
+    playRef.current=false;isPRef.current=false;setPaused(false);
+    cancelAnimationFrame(rafRef.current);startCD();
+  },[]);
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // CLUSTERING – merges events within window, keeping strongest
-    // ═══════════════════════════════════════════════════════════════════════════════
-    function clusterEvents(events, windowSec, numBands) {
-        if (windowSec <= 0 || events.length === 0) return events;
-        const bands = Array.from({ length: numBands }, () => []);
-        events.forEach(ev => bands[ev.band].push(ev));
-        const result = [];
-        for (let b = 0; b < numBands; b++) {
-            const arr = bands[b].sort((a, b) => a.time - b.time);
-            let i = 0;
-            while (i < arr.length) {
-                let j = i + 1;
-                let best = arr[i];
-                while (j < arr.length && arr[j].time - arr[i].time < windowSec) {
-                    if (arr[j].energy > best.energy) best = arr[j];
-                    j++;
-                }
-                result.push({ time: best.time, lane: b });
-                i = j;
-            }
-        }
-        return result.sort((a, b) => a.time - b.time);
-    }
+  const delTrack=async(hash,e)=>{
+    e.stopPropagation();await dbDel(hash).catch(()=>{});
+    setLib(prev=>prev.filter(r=>r.hash!==hash));
+  };
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // UNIVERSAL ONSET DETECTOR (with tonal filter & clustering)
-    // ═══════════════════════════════════════════════════════════════════════════════
-    async function detectOnsets(audioBuffer, modeCfg, onProgress) {
-        const sr=audioBuffer.sampleRate, nCh=audioBuffer.numberOfChannels, len=audioBuffer.length;
-        const mono=new Float32Array(len);
-        for(let c=0;c<nCh;c++){
-            const ch=audioBuffer.getChannelData(c);
-            for(let i=0;i<len;i++) mono[i]+=ch[i]/nCh;
-        }
+  const totalH=stats.p+stats.g,totalN=evts.length;
+  const acc=totalN>0?Math.round(totalH/totalN*100):0;
+  const M=MODES[mode],lanes=M.lanes;
 
-        const fftSize=2048;
-        const hopSize=Math.floor(sr*0.02);
-        const numFrames=Math.floor((len-fftSize)/hopSize)+1;
-        const freqRes=sr/fftSize;
+  // Shared styles
+  const S={
+    root:{minHeight:"100vh",background:"#0a0a0f",display:"flex",flexDirection:"column",
+      alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",
+      color:"#e0e0e0",userSelect:"none",padding:"20px 16px",WebkitUserSelect:"none"},
+    title:{fontSize:32,fontWeight:900,letterSpacing:8,textTransform:"uppercase",color:"#fff",
+      textShadow:"0 0 30px #ff1744,0 0 60px #ff174455",marginBottom:4},
+    sub:{fontSize:11,letterSpacing:4,color:"#333",marginBottom:24,textTransform:"uppercase"},
+    btn:{padding:"8px 18px",background:"transparent",border:"1px solid #333",borderRadius:6,
+      color:"#aaa",fontSize:11,letterSpacing:2,textTransform:"uppercase"},
+    pl:{fontSize:10,letterSpacing:3,color:"#444",textTransform:"uppercase",marginBottom:2},
+    bar:{width:320,height:2,background:"#1a1a2e",borderRadius:2,marginBottom:12},
+    card:{background:"#111118",border:"1px solid #1a1a2e",borderRadius:8,padding:"12px 14px"},
+  };
 
-        const { bandRanges, fluxThresh, deltaThresh, minEner, dedupSec, clusterWindowSec, tonalPeakRatio } = modeCfg;
-        const numBands=bandRanges.length;
-        const bandIdx=bandRanges.map(([lo,hi])=>[
-            Math.max(0,Math.floor(lo/freqRes)),
-            Math.min(fftSize/2-1,Math.ceil(hi/freqRes))
-        ]);
+  return(
+    <div style={S.root}>
+      <div style={S.title}>DRUM HERO</div>
+      <div style={S.sub}>beat your rhythm</div>
 
-        const hann=new Float32Array(fftSize);
-        for(let i=0;i<fftSize;i++) hann[i]=0.5*(1-Math.cos(2*Math.PI*i/fftSize));
-
-        const events=[];
-        const prevE=new Float32Array(numBands);
-        const hist=Array.from({length:numBands},()=>[]);
-        const HIST_LEN=50;
-        const bandSum=new Float32Array(numBands);
-        const useTonal = tonalPeakRatio > 0;
-
-        for(let fi=0;fi<numFrames;fi++){
-            const start=fi*hopSize;
-            const windowed=new Float32Array(fftSize);
-            for(let i=0;i<fftSize;i++){
-                const s=start+i<len?mono[start+i]:0;
-                windowed[i]=s*hann[i];
-            }
-            const mag=computeFFTMag(windowed,fftSize);
-            const time=(start+fftSize/2)/sr;
-
-            for(let b=0;b<numBands;b++){
-                const [lo,hi]=bandIdx[b];
-                let e=0;
-                for(let j=lo;j<=hi;j++) e+=mag[j]*mag[j];
-                e=Math.sqrt(e/Math.max(hi-lo+1,1));
-                bandSum[b]+=e;
-
-                const h=hist[b];
-                h.push(e);
-                if(h.length>HIST_LEN) h.shift();
-                const avg=h.reduce((a,v)=>a+v,0)/h.length;
-
-                if(e>avg*fluxThresh && e>prevE[b]*deltaThresh && e>minEner){
-                    // Apply tonal peak filter for non‑drum modes
-                    if (useTonal && !hasTonalPeak(mag, lo, hi, tonalPeakRatio)) {
-                        prevE[b]=e;
-                        continue;
-                    }
-                    events.push({time, band:b, energy:e});
-                }
-                prevE[b]=e;
-            }
-
-            if(fi%600===0 && onProgress) onProgress(Math.floor((fi/numFrames)*85));
-        }
-
-        // First dedup (simple minimum distance)
-        const deduped=[], lastT=new Array(numBands).fill(-Infinity);
-        const sorted=[...events].sort((a,b)=>a.time-b.time);
-        for(const ev of sorted){
-            if(ev.time-lastT[ev.band]>dedupSec){
-                deduped.push({time:ev.time, band:ev.band, energy:ev.energy});
-                lastT[ev.band]=ev.time;
-            }
-        }
-
-        // Cluster (merge close hits, keep strongest)
-        const clustered = clusterEvents(deduped, clusterWindowSec, numBands);
-        const bandAvg=Array.from(bandSum).map(s=>s/numFrames);
-        return { events:clustered, bandAvg };
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // INSTRUMENT CLASSIFIER (unchanged)
-    // ═══════════════════════════════════════════════════════════════════════════════
-    async function classifyInstrument(audioBuffer) {
-        const sr=audioBuffer.sampleRate, nCh=audioBuffer.numberOfChannels, len=audioBuffer.length;
-        const mono=new Float32Array(Math.min(len, sr*60));
-        for(let c=0;c<nCh;c++){
-            const ch=audioBuffer.getChannelData(c);
-            for(let i=0;i<mono.length;i++) mono[i]+=ch[i]/nCh;
-        }
-        const fftSize=4096, hop=Math.floor(sr*0.05), numF=Math.floor((mono.length-fftSize)/hop);
-        const freqRes=sr/fftSize;
-        const hann=new Float32Array(fftSize);
-        for(let i=0;i<fftSize;i++) hann[i]=0.5*(1-Math.cos(2*Math.PI*i/fftSize));
-        const diagBands=[[20,80],[80,200],[200,500],[500,1200],[1200,3000],[3000,6000],[6000,12000],[12000,20000]];
-        const diagIdx=diagBands.map(([lo,hi])=>[Math.floor(lo/freqRes),Math.min(fftSize/2-1,Math.ceil(hi/freqRes))]);
-        const sums=new Float32Array(8);
-        for(let fi=0;fi<numF;fi++){
-            const start=fi*hop;
-            const w=new Float32Array(fftSize);
-            for(let i=0;i<fftSize;i++) w[i]=(start+i<mono.length?mono[start+i]:0)*hann[i];
-            const mag=computeFFTMag(w,fftSize);
-            for(let b=0;b<8;b++){
-                const [lo,hi]=diagIdx[b];
-                let e=0; for(let j=lo;j<=hi;j++) e+=mag[j]*mag[j];
-                sums[b]+=Math.sqrt(e/Math.max(hi-lo+1,1));
-            }
-        }
-        const avgs=Array.from(sums).map(s=>s/Math.max(numF,1));
-        const total=avgs.reduce((a,v)=>a+v,0)+1e-9;
-        const r=avgs.map(v=>v/total);
-        const kickEnergy   = r[0]+r[1];
-        const midEnergy    = r[2]+r[3]+r[4];
-        const hiEnergy     = r[5]+r[6]+r[7];
-        const hiRatio = hiEnergy / (kickEnergy + 0.001);
-        let type, confidence;
-        if(kickEnergy > 0.28 && hiRatio > 0.4) {
-            type="drums"; confidence=Math.round(Math.min((kickEnergy*1.5+hiRatio*0.3)*100,97));
-        } else if(kickEnergy > 0.30 && hiRatio < 0.3) {
-            type="guitar"; confidence=Math.round(Math.min(kickEnergy*180,97));
-        } else if(midEnergy > 0.50 && kickEnergy < 0.22) {
-            type="synth"; confidence=Math.round(Math.min(midEnergy*130,97));
-        } else if(kickEnergy > 0.20) {
-            type="guitar"; confidence=Math.round(Math.min(kickEnergy*120+midEnergy*40,85));
-        } else {
-            type="synth"; confidence=60;
-        }
-        return { type, confidence };
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // DIFFICULTY FILTER (unchanged)
-    // ═══════════════════════════════════════════════════════════════════════════════
-    function filterByDifficulty(events,keep){
-        if(keep>=1) return events;
-        const perLane=[[],[],[],[]];
-        events.forEach((ev,i)=>perLane[ev.lane].push(i));
-        const kept=new Set();
-        perLane.forEach(idxs=>{
-            const step=Math.round(1/keep);
-            idxs.forEach((idx,pos)=>{ if(pos%step===0) kept.add(idx); });
-        });
-        return events.filter((_,i)=>kept.has(i));
-    }
-
-    // ── Hi-hat countdown click ────────────────────────────────────────────────────
-    function playClick(ctx,time=0){
-        const bufSize=Math.floor(ctx.sampleRate*0.08);
-        const buf=ctx.createBuffer(1,bufSize,ctx.sampleRate);
-        const data=buf.getChannelData(0);
-        for(let i=0;i<bufSize;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/bufSize,4);
-        const src=ctx.createBufferSource(); src.buffer=buf;
-        const hpf=ctx.createBiquadFilter(); hpf.type="highpass"; hpf.frequency.value=7000;
-        const gain=ctx.createGain(); gain.gain.setValueAtTime(0.5,ctx.currentTime);
-        src.connect(hpf); hpf.connect(gain); gain.connect(ctx.destination);
-        src.start(ctx.currentTime+time);
-    }
-
-    // ── Canvas roundRect ──────────────────────────────────────────────────────────
-    function roundRect(ctx,x,y,w,h,r){
-        ctx.beginPath();
-        ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
-        ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r);
-        ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
-        ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r);
-        ctx.arcTo(x,y,x+r,y+r,r); ctx.closePath();
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // COMPONENT
-    // ═══════════════════════════════════════════════════════════════════════════════
-    function DrumHero(){
-        const [phase,setPhase]         = useState("upload");
-        const [songName,setSongName]   = useState("");
-        const [allEvents,setAllEvents] = useState([]);
-        const [events,setEvents]       = useState([]);
-        const [instrInfo,setInstrInfo] = useState(null);
-        const [activeMode,setActiveMode]= useState("drums");
-        const [score,setScore]         = useState(0);
-        const [combo,setCombo]         = useState(0);
-        const [maxCombo,setMaxCombo]   = useState(0);
-        const [stats,setStats]         = useState({perfect:0,good:0,miss:0});
-        const [feedback,setFeedback]   = useState(null);
-        const [activePads,setActivePads]=useState([false,false,false,false]);
-        const [progress,setProgress]   = useState(0);
-        const [analyzeProgress,setAnalyzeProgress]=useState(0);
-        const [analyzeLabel,setAnalyzeLabel]=useState("");
-        const [countdown,setCountdown] = useState(null);
-
-        const canvasRef      = useRef(null);
-        const audioCtxRef    = useRef(null);
-        const sourceRef      = useRef(null);
-        const audioBufferRef = useRef(null);
-        const startTimeRef   = useRef(null);
-        const eventsRef      = useRef([]);
-        const tileStateRef   = useRef([]);
-        const animFrameRef   = useRef(null);
-        const scoreRef       = useRef(0);
-        const comboRef       = useRef(0);
-        const maxComboRef    = useRef(0);
-        const statsRef       = useRef({perfect:0,good:0,miss:0});
-        const feedbackTimerRef=useRef(null);
-        const fileInputRef   = useRef(null);
-        const isPlayingRef   = useRef(false);
-        const diffRef        = useRef(null);
-        const activeModeRef  = useRef("drums");
-
-        useEffect(()=>{ eventsRef.current=events; },[events]);
-        useEffect(()=>{ activeModeRef.current=activeMode; },[activeMode]);
-
-        const currentLanes = () => MODES[activeModeRef.current].lanes;
-
-        const showFeedback=useCallback((text,color)=>{
-            const id=Date.now();
-            setFeedback({text,color,id});
-            if(feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
-            feedbackTimerRef.current=setTimeout(()=>setFeedback(null),500);
-        },[]);
-
-        // ── File load ──────────────────────────────────────────────────────────────
-        const handleFile=async(file)=>{
-            if(!file) return;
-            setSongName(file.name.replace(/\.[^.]+$/,""));
-            setPhase("analyzing"); setAnalyzeProgress(0);
-            const ab=await file.arrayBuffer();
-            const ctx=new AudioContext();
-            audioCtxRef.current=ctx;
-            try{
-                const decoded=await ctx.decodeAudioData(ab);
-                audioBufferRef.current=decoded;
-
-                setAnalyzeLabel("ОПРЕДЕЛЯЮ ИНСТРУМЕНТ...");
-                const { type, confidence }=await classifyInstrument(decoded);
-                setInstrInfo({ type, confidence });
-
-                setAnalyzeLabel("АНАЛИЗИРУЮ НОТЫ...");
-                const modeCfg=MODES[type];
-                const { events: beats }=await detectOnsets(decoded, modeCfg, p=>{
-                    setAnalyzeProgress(p);
-                    if(p<30) setAnalyzeLabel("FFT АНАЛИЗ...");
-                    else if(p<70) setAnalyzeLabel("ПОИСК ОНСЕТОВ...");
-                    else setAnalyzeLabel("СБОРКА КАРТЫ...");
-                });
-
-                setAnalyzeProgress(100);
-                setAllEvents(beats);
-                setActiveMode(type);
-                activeModeRef.current=type;
-                setTimeout(()=>setPhase("instrument"),400);
-            }catch(e){
-                console.error(e);
-                setPhase("upload");
-                alert("Не удалось декодировать аудио. Попробуй другой файл.");
-            }
-        };
-
-        // ── Mode switch (user override) ────────────────────────────────────────────
-        const switchMode=async(newType)=>{
-            if(newType===activeMode) { setPhase("difficulty"); return; }
-            setPhase("analyzing"); setAnalyzeProgress(0); setAnalyzeLabel("ПЕРЕСТРАИВАЮ КАРТУ...");
-            const modeCfg=MODES[newType];
-            const { events: beats }=await detectOnsets(audioBufferRef.current, modeCfg, p=>{
-                setAnalyzeProgress(p);
-            });
-            setAllEvents(beats);
-            setActiveMode(newType);
-            activeModeRef.current=newType;
-            setAnalyzeProgress(100);
-            setTimeout(()=>setPhase("difficulty"),300);
-        };
-
-        // ── Difficulty ─────────────────────────────────────────────────────────────
-        const chooseDifficulty=(diff)=>{
-            diffRef.current=diff;
-            const filtered=filterByDifficulty(allEvents,diff.keep);
-            setEvents(filtered);
-            tileStateRef.current=filtered.map(()=>"pending");
-            startCountdown();
-        };
-
-        // ── Countdown ──────────────────────────────────────────────────────────────
-        const startCountdown=()=>{
-            setPhase("countdown");
-            const ctx=audioCtxRef.current;
-            [0.3,1.3,2.3].forEach(t=>playClick(ctx,t));
-            setCountdown(3);
-            setTimeout(()=>setCountdown(2),1000);
-            setTimeout(()=>setCountdown(1),2000);
-            setTimeout(()=>setCountdown("GO!"),3000);
-            setTimeout(()=>setPhase("game"),3600);
-        };
-
-        // ── Audio start ────────────────────────────────────────────────────────────
-        const startAudio=useCallback(()=>{
-            if(!audioBufferRef.current||!audioCtxRef.current) return;
-            scoreRef.current=0; comboRef.current=0; maxComboRef.current=0;
-            statsRef.current={perfect:0,good:0,miss:0};
-            setScore(0); setCombo(0); setMaxCombo(0); setStats({perfect:0,good:0,miss:0});
-            tileStateRef.current=eventsRef.current.map(()=>"pending");
-            isPlayingRef.current=true;
-            const src=audioCtxRef.current.createBufferSource();
-            src.buffer=audioBufferRef.current;
-            src.connect(audioCtxRef.current.destination);
-            sourceRef.current=src;
-            startTimeRef.current=audioCtxRef.current.currentTime;
-            src.start(0);
-            src.onended=()=>{ if(isPlayingRef.current){ isPlayingRef.current=false; setTimeout(()=>setPhase("result"),500); } };
-        },[]);
-
-        useEffect(()=>{ if(phase==="game") setTimeout(()=>startAudio(),100); },[phase,startAudio]);
-
-        // ── Canvas render (with tile stroke) ──────────────────────────────────────
-        useEffect(()=>{
-            if(phase!=="game") return;
-            const canvas=canvasRef.current; if(!canvas) return;
-            const ctx=canvas.getContext("2d");
-            const W=canvas.width, H=canvas.height, laneW=W/4;
-            const hitLineY=H*(HIT_ZONE_Y/100);
-            const lanes=MODES[activeModeRef.current].lanes;
-
-            const draw=()=>{
-                const now=(audioCtxRef.current&&startTimeRef.current!=null)
-                    ?audioCtxRef.current.currentTime-startTimeRef.current:0;
-                setProgress((now/(audioBufferRef.current?.duration||1))*100);
-
-                ctx.fillStyle="#0d0d14"; ctx.fillRect(0,0,W,H);
-                for(let i=1;i<4;i++){
-                    ctx.strokeStyle="#1a1a2e"; ctx.lineWidth=1;
-                    ctx.beginPath(); ctx.moveTo(i*laneW,0); ctx.lineTo(i*laneW,H); ctx.stroke();
-                }
-
-                eventsRef.current.forEach((ev,i)=>{
-                    const state=tileStateRef.current[i];
-                    if(state==="hit") return;
-                    const y=hitLineY-(ev.time-now)*TILE_SPEED;
-                    if(y<-TILE_HEIGHT-10||y>H+10) return;
-
-                    if(y>hitLineY+TILE_HEIGHT*2&&state==="pending"){
-                        tileStateRef.current[i]="miss";
-                        comboRef.current=0; setCombo(0);
-                        statsRef.current.miss++; setStats({...statsRef.current});
-                    }
-
-                    const x=ev.lane*laneW, color=lanes[ev.lane]?.color||"#ffffff";
-                    ctx.globalAlpha=state==="miss"?0.18:1;
-                    if(state==="pending"){
-                        const grd=ctx.createRadialGradient(x+laneW/2,y+TILE_HEIGHT/2,2,x+laneW/2,y+TILE_HEIGHT/2,laneW*0.8);
-                        grd.addColorStop(0,color+"44"); grd.addColorStop(1,"transparent");
-                        ctx.fillStyle=grd; ctx.fillRect(x-10,y-10,laneW+20,TILE_HEIGHT+20);
-                    }
-                    ctx.fillStyle=color;
-                    roundRect(ctx,x+4,y,laneW-8,TILE_HEIGHT,6);
-                    ctx.fill();
-                    // ═══ ADDED VISIBLE STROKE ═══
-                    ctx.strokeStyle = "#ffffffcc";
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    // inner highlight
-                    ctx.fillStyle="rgba(255,255,255,0.2)";
-                    roundRect(ctx,x+4,y,laneW-8,TILE_HEIGHT/3,6);
-                    ctx.fill();
-                    ctx.globalAlpha=1;
-                });
-
-                const modeColor=MODES[activeModeRef.current].color;
-                ctx.strokeStyle=modeColor+"66"; ctx.lineWidth=2;
-                ctx.shadowColor=modeColor; ctx.shadowBlur=12;
-                ctx.beginPath(); ctx.moveTo(0,hitLineY); ctx.lineTo(W,hitLineY); ctx.stroke();
-                ctx.shadowBlur=0;
-
-                animFrameRef.current=requestAnimationFrame(draw);
-            };
-            animFrameRef.current=requestAnimationFrame(draw);
-            return()=>{ if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
-        },[phase]);
-
-        // ── Hit handler ────────────────────────────────────────────────────────────
-        const handleHit=useCallback((li)=>{
-            setActivePads(prev=>{ const n=[...prev]; n[li]=true; return n; });
-            setTimeout(()=>setActivePads(prev=>{ const n=[...prev]; n[li]=false; return n; }),100);
-            if(!isPlayingRef.current||!audioCtxRef.current) return;
-            const now=audioCtxRef.current.currentTime-startTimeRef.current;
-            const diff=diffRef.current;
-            let best=null,bestDist=Infinity;
-            eventsRef.current.forEach((ev,i)=>{
-                if(ev.lane!==li||tileStateRef.current[i]!=="pending") return;
-                const d=Math.abs(ev.time-now)*1000;
-                if(d<bestDist){ bestDist=d; best=i; }
-            });
-            if(best!==null&&bestDist<=diff.goodMs){
-                tileStateRef.current[best]="hit";
-                comboRef.current++;
-                if(comboRef.current>maxComboRef.current){ maxComboRef.current=comboRef.current; setMaxCombo(maxComboRef.current); }
-                setCombo(comboRef.current);
-                const mult=Math.min(Math.floor(comboRef.current/5)+1,4);
-                if(bestDist<=diff.hitMs){
-                    scoreRef.current+=100*mult; setScore(scoreRef.current);
-                    statsRef.current.perfect++; setStats({...statsRef.current});
-                    showFeedback("PERFECT","#76ff03");
-                } else {
-                    scoreRef.current+=50*mult; setScore(scoreRef.current);
-                    statsRef.current.good++; setStats({...statsRef.current});
-                    showFeedback("GOOD","#00e5ff");
-                }
-            } else {
-                comboRef.current=0; setCombo(0);
-                showFeedback("MISS","#ff1744");
-            }
-        },[showFeedback]);
-
-        // ── Keyboard (uses e.code to support any layout) ──────────────────────────
-        useEffect(()=>{
-            if(phase!=="game") return;
-            const codeMap = { 'KeyF':0, 'KeyG':1, 'KeyH':2, 'KeyJ':3 };
-            const onKey=(e)=>{
-                const li = codeMap[e.code];
-                if(li === undefined) return;
-                e.preventDefault();
-                handleHit(li);
-            };
-            window.addEventListener("keydown",onKey);
-            return()=>window.removeEventListener("keydown",onKey);
-        },[phase,handleHit]);
-
-        const stopGame=useCallback(()=>{
-            isPlayingRef.current=false;
-            try{ sourceRef.current?.stop(); }catch{}
-            if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-            setPhase("result");
-        },[]);
-        const playAgain=useCallback(()=>{
-            try{ sourceRef.current?.stop(); }catch{}
-            isPlayingRef.current=false;
-            if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-            startCountdown();
-        },[]);
-        const backToDifficulty=useCallback(()=>{
-            try{ sourceRef.current?.stop(); }catch{}
-            isPlayingRef.current=false;
-            if(animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-            setPhase("difficulty");
-        },[]);
-
-        const totalHits=stats.perfect+stats.good, totalNotes=events.length;
-        const accuracy=totalNotes>0?Math.round((totalHits/totalNotes)*100):0;
-
-        // ── Styles ─────────────────────────────────────────────────────────────────
-        const C={
-            root:{ minHeight:"100vh",background:"#0a0a0f",display:"flex",flexDirection:"column",
-                alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",
-                color:"#e0e0e0",userSelect:"none",padding:"20px 0" },
-            title:{ fontSize:36,fontWeight:900,letterSpacing:8,textTransform:"uppercase",color:"#fff",
-                textShadow:"0 0 30px #ff1744,0 0 60px #ff174455",marginBottom:4 },
-            sub:{ fontSize:11,letterSpacing:4,color:"#333",marginBottom:32,textTransform:"uppercase" },
-            btn:{ padding:"8px 20px",background:"transparent",border:"1px solid #333",borderRadius:6,
-                color:"#aaa",fontSize:12,letterSpacing:2,textTransform:"uppercase",fontFamily:"'Courier New',monospace" },
-            scoreLbl:{ fontSize:10,letterSpacing:3,color:"#444",textTransform:"uppercase",marginBottom:2 },
-            progBar:{ width:320,height:2,background:"#1a1a2e",borderRadius:2,marginBottom:16 },
-        };
-
-        const modeMeta=MODES[activeMode];
-        const lanes=modeMeta.lanes;
-
-        // ── Render ──────────────────────────────────────────────────────────────────
-        return (
-            <div style={C.root}>
-                <div style={C.title}>DRUM HERO</div>
-                <div style={C.sub}>beat your rhythm</div>
-
-                {/* UPLOAD */}
-                {phase==="upload"&&(
-                    <div onClick={()=>fileInputRef.current?.click()}
-                         onDragOver={e=>e.preventDefault()}
-                         onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0]);}}
-                         style={{border:"2px dashed #2a2a2a",borderRadius:12,padding:"40px 60px",
-                             textAlign:"center",cursor:"pointer",background:"#111118"}}>
-                        <div style={{fontSize:52,marginBottom:12}}>🥁</div>
-                        <div style={{color:"#ccc",fontSize:16,marginBottom:8,fontWeight:700,letterSpacing:2}}>ЗАГРУЗИ ТРЕК</div>
-                        <div style={{color:"#444",fontSize:12,letterSpacing:2}}>MP3 / WAV / OGG · drag & drop или клик</div>
-                        <input ref={fileInputRef} type="file" accept="audio/*" style={{display:"none"}}
-                               onChange={e=>handleFile(e.target.files[0])}/>
-                    </div>
-                )}
-
-                {/* ANALYZING */}
-                {phase==="analyzing"&&(
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
-                        <div style={{fontSize:13,letterSpacing:4,color:"#555"}}>{analyzeLabel||"АНАЛИЗИРУЮ..."}</div>
-                        <div style={{display:"flex",gap:8}}>
-                            {[1,2,3].map(n=><div key={n} className={`dot${n}`} style={{width:10,height:10,borderRadius:"50%",background:"#ff1744"}}/>)}
-                        </div>
-                        <div style={{width:280,height:2,background:"#1a1a2e",borderRadius:2}}>
-                            <div style={{width:`${analyzeProgress}%`,height:"100%",background:"#ff1744",borderRadius:2,transition:"width 0.3s"}}/>
-                        </div>
-                        <div style={{fontSize:32,fontWeight:900,color:"#ff1744"}}>{analyzeProgress}%</div>
-                    </div>
-                )}
-
-                {/* INSTRUMENT DETECTION SCREEN */}
-                {phase==="instrument"&&instrInfo&&(
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20,
-                        animation:"instrReveal 0.4s ease-out forwards",maxWidth:340,textAlign:"center"}}>
-                        <div style={{fontSize:11,letterSpacing:4,color:"#444",textTransform:"uppercase"}}>определён инструмент</div>
-                        <div style={{fontSize:11,color:"#2a2a2a",letterSpacing:2,marginTop:-12}}>{songName}</div>
-                        <div style={{border:`1px solid ${MODES[instrInfo.type].color}33`,borderRadius:16,
-                            padding:"24px 32px",background:`${MODES[instrInfo.type].color}08`,
-                            display:"flex",flexDirection:"column",alignItems:"center",gap:10,width:300,
-                            boxShadow:`0 0 40px ${MODES[instrInfo.type].color}11`,animation:"instrPing 0.6s ease-out 0.2s 1"}}>
-                            <div style={{fontSize:52}}>{MODES[instrInfo.type].emoji}</div>
-                            <div style={{fontSize:18,fontWeight:900,color:MODES[instrInfo.type].color,letterSpacing:4,textTransform:"uppercase"}}>
-                                {MODES[instrInfo.type].label}
-                            </div>
-                            <div style={{width:"100%",marginTop:4}}>
-                                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                                    <div style={{fontSize:9,letterSpacing:2,color:"#333",textTransform:"uppercase"}}>уверенность</div>
-                                    <div style={{fontSize:9,color:MODES[instrInfo.type].color}}>{Math.min(instrInfo.confidence,99)}%</div>
-                                </div>
-                                <div style={{height:2,background:"#1a1a2e",borderRadius:2}}>
-                                    <div style={{height:"100%",width:`${Math.min(instrInfo.confidence,99)}%`,
-                                        background:MODES[instrInfo.type].color,borderRadius:2,transition:"width 0.8s ease-out"}}/>
-                                </div>
-                            </div>
-                        </div>
-                        <div style={{width:300,border:"1px solid #1a1a2e",borderRadius:12,padding:"14px 16px",textAlign:"left"}}>
-                            <div style={{fontSize:9,letterSpacing:3,color:"#333",textTransform:"uppercase",marginBottom:10}}>
-                                выбор режима
-                            </div>
-                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                                {Object.entries(MODES).map(([key,m])=>{
-                                    const isSel=key===instrInfo.type;
-                                    return(
-                                        <button key={key}
-                                                onClick={()=>{ setInstrInfo({...instrInfo,type:key}); }}
-                                                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
-                                                    background:isSel?`${m.color}18`:"transparent",
-                                                    border:`1px solid ${isSel?m.color+"66":"#222"}`,
-                                                    borderRadius:8,color:isSel?m.color:"#555",fontSize:12,letterSpacing:2,
-                                                    textTransform:"uppercase",textAlign:"left",transition:"all 0.15s"}}>
-                                            <span style={{fontSize:20}}>{m.emoji}</span>
-                                            <div>
-                                                <div style={{fontWeight:700,fontSize:11}}>{m.label}</div>
-                                                <div style={{fontSize:9,opacity:0.5,letterSpacing:1,marginTop:2}}>
-                                                    {m.lanes.map(l=>l.name).join(" · ")}
-                                                </div>
-                                            </div>
-                                            {isSel&&<div style={{marginLeft:"auto",fontSize:10,color:m.color}}>✓ авто</div>}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                        <button
-                            onClick={()=>switchMode(instrInfo.type)}
-                            style={{padding:"14px 40px",background:"transparent",
-                                border:`1px solid ${MODES[instrInfo.type].color}66`,borderRadius:8,
-                                color:MODES[instrInfo.type].color,fontSize:13,fontWeight:700,
-                                letterSpacing:4,textTransform:"uppercase",marginTop:4}}>
-                            ВЫБРАТЬ СЛОЖНОСТЬ →
-                        </button>
-                        <button style={{...C.btn,fontSize:10}} onClick={()=>setPhase("upload")}>← другой трек</button>
-                    </div>
-                )}
-
-                {/* DIFFICULTY */}
-                {phase==="difficulty"&&(
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:24}}>
-                        <div style={{fontSize:12,letterSpacing:5,color:"#444",textTransform:"uppercase"}}>выбери сложность</div>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-12}}>
-                            <span style={{fontSize:16}}>{modeMeta.emoji}</span>
-                            <span style={{fontSize:10,color:modeMeta.color,letterSpacing:2,textTransform:"uppercase"}}>
-                                {modeMeta.label}
-                            </span>
-                        </div>
-                        <div style={{display:"flex",flexDirection:"column",gap:12,width:280}}>
-                            {DIFFICULTIES.map(diff=>(
-                                <button key={diff.id} onClick={()=>chooseDifficulty(diff)}
-                                        style={{padding:"16px 24px",background:"transparent",border:`1px solid ${diff.color}44`,
-                                            borderRadius:8,color:diff.color,fontSize:14,fontWeight:700,letterSpacing:4,
-                                            textTransform:"uppercase",display:"flex",justifyContent:"space-between",alignItems:"center",
-                                            transition:"background 0.15s"}}
-                                        onMouseEnter={e=>e.currentTarget.style.background=diff.color+"11"}
-                                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                    <span>{diff.label}</span>
-                                    <span style={{fontSize:10,color:diff.color+"88",letterSpacing:2}}>{diff.desc}</span>
-                                </button>
-                            ))}
-                        </div>
-                        <button style={{...C.btn,marginTop:8,fontSize:10}} onClick={()=>setPhase("instrument")}>← назад</button>
-                    </div>
-                )}
-
-                {/* COUNTDOWN */}
-                {phase==="countdown"&&(
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:24}}>
-                        <div style={{fontSize:11,color:"#333",letterSpacing:3,textTransform:"uppercase"}}>{songName}</div>
-                        <div key={countdown} style={{
-                            fontSize:countdown==="GO!"?72:96,fontWeight:900,
-                            color:countdown==="GO!"?"#76ff03":"#fff",
-                            textShadow:countdown==="GO!"?"0 0 40px #76ff03,0 0 80px #76ff0388":"0 0 40px #ff1744,0 0 80px #ff174455",
-                            letterSpacing:countdown==="GO!"?8:0,
-                            animation:"countPop 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards",
-                            minWidth:160,textAlign:"center"}}>
-                            {countdown}
-                        </div>
-                        <div style={{fontSize:10,color:"#2a2a2a",letterSpacing:4,textTransform:"uppercase"}}>
-                            {diffRef.current?.label} · {modeMeta.label}
-                        </div>
-                    </div>
-                )}
-
-                {/* GAME */}
-                {phase==="game"&&(
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-                        <div style={{display:"flex",gap:48,marginBottom:16,alignItems:"flex-end"}}>
-                            <div style={{textAlign:"center"}}>
-                                <div style={C.scoreLbl}>SCORE</div>
-                                <div style={{fontSize:36,fontWeight:900,color:"#fff",lineHeight:1}}>{score.toLocaleString()}</div>
-                            </div>
-                            <div style={{textAlign:"center"}}>
-                                <div style={C.scoreLbl}>COMBO</div>
-                                <div style={{fontSize:44,fontWeight:900,lineHeight:1,color:combo>0?"#ff9100":"#1e1e1e"}}>
-                                    {combo>0?`×${combo}`:"—"}
-                                </div>
-                            </div>
-                            <div style={{textAlign:"center"}}>
-                                <div style={C.scoreLbl}>NOTES</div>
-                                <div style={{fontSize:22,fontWeight:700,color:"#333",lineHeight:1}}>{totalHits}/{totalNotes}</div>
-                            </div>
-                        </div>
-                        <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:8}}>
-                            <div style={{fontSize:9,letterSpacing:2,color:diffRef.current?.color+"88",textTransform:"uppercase",
-                                border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"2px 8px"}}>
-                                {diffRef.current?.label}
-                            </div>
-                            <div style={{fontSize:9,letterSpacing:2,color:modeMeta.color+"77",textTransform:"uppercase",
-                                border:`1px solid ${modeMeta.color}22`,borderRadius:4,padding:"2px 8px"}}>
-                                {modeMeta.emoji} {modeMeta.label}
-                            </div>
-                        </div>
-                        <div style={C.progBar}>
-                            <div style={{width:`${progress}%`,height:"100%",background:modeMeta.color,borderRadius:2,transition:"width 0.5s"}}/>
-                        </div>
-                        <div style={{position:"relative",width:320,height:CANVAS_H,background:"#0d0d14",
-                            border:"1px solid #1a1a2e",borderRadius:8,overflow:"hidden"}}>
-                            <canvas ref={canvasRef} width={320} height={CANVAS_H} style={{display:"block"}}/>
-                            <div style={{position:"absolute",left:0,right:0,bottom:0,height:72,display:"flex"}}>
-                                {lanes.map((lane,i)=>(
-                                    <div key={lane.key} className="touch-pad"
-                                         onPointerDown={e=>{e.preventDefault();handleHit(i);}}
-                                         style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
-                                             justifyContent:"center",gap:2,
-                                             border:"1px solid #1a1a1a",borderBottom:"none",borderRadius:"4px 4px 0 0",
-                                             color:activePads[i]?"#fff":lane.color+"77",
-                                             background:activePads[i]?lane.color+"2a":"transparent",
-                                             boxShadow:activePads[i]?`inset 0 0 24px ${lane.color}33`:"none",
-                                             cursor:"pointer",touchAction:"none"}}>
-                                        <div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{lane.label}</div>
-                                        <div style={{fontSize:7,letterSpacing:1,opacity:0.5,textTransform:"uppercase"}}>{lane.name}</div>
-                                    </div>
-                                ))}
-                            </div>
-                            {feedback&&(
-                                <div key={feedback.id} style={{
-                                    position:"absolute",left:0,right:0,top:"36%",
-                                    display:"flex",justifyContent:"center",
-                                    fontSize:20,fontWeight:900,letterSpacing:5,textTransform:"uppercase",
-                                    color:feedback.color,textShadow:`0 0 24px ${feedback.color}`,
-                                    animation:"fadeUp 0.5s ease-out forwards",pointerEvents:"none"}}>
-                                    {feedback.text}
-                                </div>
-                            )}
-                        </div>
-                        <div style={{display:"flex",width:320,marginTop:4}}>
-                            {lanes.map(lane=>(
-                                <div key={lane.key} style={{flex:1,textAlign:"center",fontSize:9,letterSpacing:1,
-                                    color:lane.color+"55",textTransform:"uppercase"}}>{lane.name}</div>
-                            ))}
-                        </div>
-                        <div style={{display:"flex",gap:12,marginTop:14,flexWrap:"wrap",justifyContent:"center"}}>
-                            <button style={C.btn} onClick={playAgain}>↺ RESTART</button>
-                            <button style={C.btn} onClick={backToDifficulty}>☰ СЛОЖНОСТЬ</button>
-                            <button style={C.btn} onClick={stopGame}>■ СТОП</button>
-                        </div>
-                    </div>
-                )}
-
-                {/* RESULT */}
-                {phase==="result"&&(
-                    <div style={{textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:20}}>
-                        <div style={{fontSize:12,letterSpacing:6,color:"#333",textTransform:"uppercase"}}>результат</div>
-                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                            <div style={{fontSize:9,letterSpacing:2,color:diffRef.current?.color+"88",textTransform:"uppercase",
-                                border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"3px 12px"}}>
-                                {diffRef.current?.label}
-                            </div>
-                            <div style={{fontSize:9,letterSpacing:2,color:modeMeta.color+"88",textTransform:"uppercase",
-                                border:`1px solid ${modeMeta.color}33`,borderRadius:4,padding:"3px 12px"}}>
-                                {modeMeta.emoji} {modeMeta.label}
-                            </div>
-                        </div>
-                        <div style={{fontSize:64,fontWeight:900,color:"#fff",
-                            textShadow:"0 0 40px #ff1744,0 0 80px #ff174433",lineHeight:1}}>
-                            {score.toLocaleString()}
-                        </div>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 48px"}}>
-                            {[["ACCURACY",accuracy+"%"],["MAX COMBO","×"+maxCombo],
-                                ["PERFECT",stats.perfect],["GOOD",stats.good],["MISS",stats.miss],["NOTES",totalNotes]]
-                                .map(([label,val])=>(
-                                    <div key={label} style={{textAlign:"center"}}>
-                                        <div style={{fontSize:9,letterSpacing:3,color:"#333",textTransform:"uppercase"}}>{label}</div>
-                                        <div style={{fontSize:24,fontWeight:700,color:"#bbb"}}>{val}</div>
-                                    </div>
-                                ))}
-                        </div>
-                        <div style={{display:"flex",gap:12,marginTop:8,flexWrap:"wrap",justifyContent:"center"}}>
-                            <button style={{...C.btn,borderColor:"#ff174466",color:"#ff1744"}} onClick={playAgain}>↺ ЕЩЁ РАЗ</button>
-                            <button style={C.btn} onClick={backToDifficulty}>☰ СЛОЖНОСТЬ</button>
-                            <button style={C.btn} onClick={()=>{
-                                setPhase("upload");setSongName("");setAllEvents([]);setEvents([]);setInstrInfo(null);
-                            }}>♪ ДРУГОЙ ТРЕК</button>
-                        </div>
-                    </div>
-                )}
+      {/* ── LIBRARY ── */}
+      {ph==="lib"&&(
+        <div style={{width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:10,letterSpacing:3,color:"#444",textTransform:"uppercase"}}>библиотека</div>
+            <button style={{...S.btn,padding:"6px 14px",fontSize:10}} onClick={()=>setPh("upload")}>+ ЗАГРУЗИТЬ</button>
+          </div>
+          {lib.length===0?(
+            <div style={{textAlign:"center",padding:"48px 0",color:"#2a2a2a"}}>
+              <div style={{fontSize:40,marginBottom:8}}>🎵</div>
+              <div style={{fontSize:11,letterSpacing:2}}>Библиотека пуста</div>
             </div>
-        );
-    }
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:"60vh",overflowY:"auto"}}>
+              {lib.map(r=>(
+                <div key={r.hash} onClick={()=>loadLib(r)} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"border-color .15s"}}
+                     onMouseEnter={e=>e.currentTarget.style.borderColor="#333"}
+                     onMouseLeave={e=>e.currentTarget.style.borderColor="#1a1a2e"}>
+                  <div style={{fontSize:22}}>🎵</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:"#ccc",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
+                    <div style={{fontSize:9,color:"#444",marginTop:2}}>{fmtDur(r.duration)} · {r.bpm&&`♩${r.bpm} · `}{fmtSz(r.size||0)}</div>
+                  </div>
+                  <button onClick={e=>delTrack(r.hash,e)} style={{background:"transparent",border:"none",color:"#2a2a2a",fontSize:16,padding:"4px 6px",borderRadius:4,flexShrink:0}}
+                          onMouseEnter={e=>e.currentTarget.style.color="#ff1744"}
+                          onMouseLeave={e=>e.currentTarget.style.color="#2a2a2a"}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<DrumHero />);
+      {/* ── UPLOAD ── */}
+      {ph==="upload"&&(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,width:"100%",maxWidth:360}}>
+          <div onClick={()=>fileRef.current?.click()}
+               onDragOver={e=>e.preventDefault()}
+               onDrop={e=>{e.preventDefault();processFile(e.dataTransfer.files[0]);}}
+               style={{width:"100%",border:"2px dashed #2a2a2a",borderRadius:12,padding:"40px 32px",textAlign:"center",cursor:"pointer",background:"#111118"}}>
+            <div style={{fontSize:48,marginBottom:10}}>🎵</div>
+            <div style={{color:"#ccc",fontSize:15,marginBottom:6,fontWeight:700,letterSpacing:2}}>ЗАГРУЗИ ТРЕК</div>
+            <div style={{color:"#444",fontSize:11,letterSpacing:1}}>MP3 / WAV / M4A / AAC</div>
+            <div style={{color:"#444",fontSize:11,marginTop:4}}>drag & drop или нажми</div>
+            {/* iOS: accept="*" + capture workaround */}
+            <input ref={fileRef} type="file" accept="audio/*,audio/mp3,audio/mpeg,audio/mp4,audio/m4a,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+                   style={{display:"none"}} onChange={e=>processFile(e.target.files[0])}/>
+          </div>
+          <button style={{...S.btn,fontSize:10}} onClick={()=>setPh("lib")}>← библиотека</button>
+        </div>
+      )}
+
+      {/* ── ANALYZING ── */}
+      {ph==="analyzing"&&(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,textAlign:"center"}}>
+          <div style={{fontSize:12,letterSpacing:4,color:"#555",textTransform:"uppercase"}}>{anLbl||"АНАЛИЗИРУЕМ..."}</div>
+          <div style={{display:"flex",gap:8}}>{[1,2,3].map(n=><div key={n} className={`d${n}`} style={{width:10,height:10,borderRadius:"50%",background:"#ff1744"}}/>)}</div>
+          <div style={{width:260,height:2,background:"#1a1a2e",borderRadius:2}}>
+            <div style={{width:`${anProg}%`,height:"100%",background:"#ff1744",borderRadius:2,transition:"width .3s"}}/>
+          </div>
+          <div style={{fontSize:28,fontWeight:900,color:"#ff1744"}}>{anProg}%</div>
+          {bpm&&<div style={{fontSize:11,color:"#333",letterSpacing:3}}>BPM: <span style={{color:"#ff9100"}}>{bpm.bpm}</span></div>}
+        </div>
+      )}
+
+      {/* ── MODE SELECT ── */}
+      {ph==="modeSelect"&&(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:18,width:"100%",maxWidth:340}}>
+          <div style={{fontSize:11,letterSpacing:4,color:"#444",textTransform:"uppercase"}}>выбери инструмент</div>
+          {bpm&&<div style={{fontSize:12,color:"#ff9100",letterSpacing:3,fontWeight:700,marginTop:-10}}>♩ {bpm.bpm} BPM</div>}
+          <div style={{width:"100%",display:"flex",flexDirection:"column",gap:10}}>
+            {Object.entries(MODES).map(([k,m])=>(
+              <button key={k} onClick={()=>startMode(k)}
+                      style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:"transparent",
+                        border:`1px solid ${m.color}33`,borderRadius:10,color:m.color,textTransform:"uppercase",textAlign:"left"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=m.color+"11"}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:26}}>{m.emoji}</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,letterSpacing:3}}>{m.label}</div>
+                  <div style={{fontSize:9,opacity:.5,letterSpacing:1,marginTop:2}}>{m.lanes.map(l=>l.n).join(" · ")}</div>
+                </div>
+                <div style={{marginLeft:"auto",fontSize:14,opacity:.4}}>→</div>
+              </button>
+            ))}
+          </div>
+          <button style={{...S.btn,fontSize:10}} onClick={()=>setPh("lib")}>← библиотека</button>
+        </div>
+      )}
+
+      {/* ── DIFFICULTY ── */}
+      {ph==="diff"&&(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20}}>
+          <div style={{fontSize:11,letterSpacing:5,color:"#444",textTransform:"uppercase"}}>сложность</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-12}}>
+            <span>{M.emoji}</span>
+            <span style={{fontSize:10,color:M.color,letterSpacing:2,textTransform:"uppercase"}}>{M.label}</span>
+            {bpm&&<span style={{fontSize:10,color:"#ff9100",letterSpacing:2}}>♩{bpm.bpm}</span>}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12,width:280}}>
+            {DIFFS.map(d=>(
+              <button key={d.id} onClick={()=>chooseDiff(d)}
+                      style={{padding:"14px 20px",background:"transparent",border:`1px solid ${d.color}44`,borderRadius:8,
+                        color:d.color,fontSize:13,fontWeight:700,letterSpacing:4,textTransform:"uppercase",
+                        display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=d.color+"11"}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span>{d.label}</span>
+                <span style={{fontSize:9,opacity:.6,letterSpacing:2}}>{d.desc}</span>
+              </button>
+            ))}
+          </div>
+          <button style={{...S.btn,fontSize:10}} onClick={()=>setPh("modeSelect")}>← инструмент</button>
+        </div>
+      )}
+
+      {/* ── COUNTDOWN ── */}
+      {ph==="countdown"&&(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20}}>
+          <div style={{fontSize:11,color:"#333",letterSpacing:3,textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{name}</div>
+          <div key={cd} style={{fontSize:cd==="GO!"?72:96,fontWeight:900,color:cd==="GO!"?"#76ff03":"#fff",
+            textShadow:cd==="GO!"?"0 0 40px #76ff03":"0 0 40px #ff1744",letterSpacing:cd==="GO!"?8:0,
+            animation:"pop .35s cubic-bezier(.175,.885,.32,1.275) forwards",minWidth:140,textAlign:"center"}}>
+            {cd}
+          </div>
+        </div>
+      )}
+
+      {/* ── GAME ── */}
+      {ph==="game"&&(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:"100%",maxWidth:360}}>
+          {/* HUD */}
+          <div style={{display:"flex",gap:32,marginBottom:10,alignItems:"flex-end"}}>
+            <div style={{textAlign:"center"}}><div style={S.pl}>SCORE</div><div style={{fontSize:32,fontWeight:900,color:"#fff",lineHeight:1}}>{score.toLocaleString()}</div></div>
+            <div style={{textAlign:"center"}}><div style={S.pl}>COMBO</div><div style={{fontSize:40,fontWeight:900,lineHeight:1,color:combo>0?"#ff9100":"#1e1e1e"}}>{combo>0?`×${combo}`:"—"}</div></div>
+            <div style={{textAlign:"center"}}><div style={S.pl}>NOTES</div><div style={{fontSize:18,fontWeight:700,color:"#333",lineHeight:1}}>{totalH}/{totalN}</div></div>
+          </div>
+          {/* Badges */}
+          <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap",justifyContent:"center"}}>
+            <span style={{fontSize:9,color:diffRef.current?.color+"88",border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"2px 8px",textTransform:"uppercase",letterSpacing:2}}>{diffRef.current?.label}</span>
+            <span style={{fontSize:9,color:M.color+"77",border:`1px solid ${M.color}22`,borderRadius:4,padding:"2px 8px",textTransform:"uppercase",letterSpacing:2}}>{M.emoji} {M.label}</span>
+            {bpm&&<span style={{fontSize:9,color:"#ff910077",border:"1px solid #ff910022",borderRadius:4,padding:"2px 8px"}}>♩{bpm.bpm}</span>}
+          </div>
+          <div style={S.bar}><div style={{width:`${prog}%`,height:"100%",background:M.color,borderRadius:2,transition:"width .5s"}}/></div>
+
+          {/* Track */}
+          <div style={{position:"relative",width:"100%",maxWidth:320,height:CH,background:"#0d0d14",border:"1px solid #1a1a2e",borderRadius:8,overflow:"hidden"}}>
+            <canvas ref={canRef} width={320} height={CH} style={{display:"block",width:"100%",height:"100%"}}/>
+            {/* Touch / click pads */}
+            <div style={{position:"absolute",left:0,right:0,bottom:0,height:72,display:"flex"}}>
+              {lanes.map((lane,i)=>(
+                <div key={lane.k}
+                     onPointerDown={e=>{e.preventDefault();hit(i);}}
+                     style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
+                       border:"1px solid #1a1a1a",borderBottom:"none",borderRadius:"4px 4px 0 0",
+                       color:pads[i]?"#fff":lane.c+"77",
+                       background:pads[i]?lane.c+"2a":"transparent",
+                       boxShadow:pads[i]?`inset 0 0 20px ${lane.c}33`:"none",
+                       transition:"background .05s,box-shadow .05s",cursor:"pointer",touchAction:"none",
+                       WebkitUserSelect:"none",userSelect:"none"}}>
+                  <div style={{fontSize:18,fontWeight:900,lineHeight:1}}>{lane.l}</div>
+                  <div style={{fontSize:7,letterSpacing:1,opacity:.5,textTransform:"uppercase"}}>{lane.n}</div>
+                </div>
+              ))}
+            </div>
+            {/* Feedback */}
+            {fb&&<div key={fb.id} style={{position:"absolute",left:0,right:0,top:"36%",display:"flex",justifyContent:"center",
+              fontSize:20,fontWeight:900,letterSpacing:5,textTransform:"uppercase",color:fb.col,
+              textShadow:`0 0 24px ${fb.col}`,animation:"fadeUp .5s ease-out forwards",pointerEvents:"none"}}>{fb.txt}</div>}
+            {/* Pause overlay */}
+            {paused&&!rcd&&(
+              <div style={{position:"absolute",inset:0,background:"#0a0a0fdd",display:"flex",flexDirection:"column",
+                alignItems:"center",justifyContent:"center",gap:20}}>
+                <div style={{fontSize:28,fontWeight:900,letterSpacing:8,color:"#fff",textTransform:"uppercase",textShadow:"0 0 30px #ff1744"}}>ПАУЗА</div>
+                <button onClick={resumeGame} style={{padding:"12px 28px",background:"transparent",border:"1px solid #ff174466",borderRadius:8,color:"#ff1744",fontSize:12,fontWeight:700,letterSpacing:4,textTransform:"uppercase"}}>▶ ПРОДОЛЖИТЬ</button>
+              </div>
+            )}
+            {rcd&&(
+              <div style={{position:"absolute",inset:0,background:"#0a0a0fbb",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <div key={rcd} style={{fontSize:rcd==="GO!"?72:96,fontWeight:900,color:rcd==="GO!"?"#76ff03":"#fff",
+                  textShadow:rcd==="GO!"?"0 0 40px #76ff03":"0 0 40px #ff1744",
+                  animation:"pop .35s cubic-bezier(.175,.885,.32,1.275) forwards",minWidth:100,textAlign:"center"}}>{rcd}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Lane labels */}
+          <div style={{display:"flex",width:"100%",maxWidth:320,marginTop:4,marginBottom:4}}>
+            {lanes.map(l=><div key={l.k} style={{flex:1,textAlign:"center",fontSize:9,letterSpacing:1,color:l.c+"55",textTransform:"uppercase"}}>{l.n}</div>)}
+          </div>
+
+          {/* EQ slider */}
+          <div style={{...S.card,width:"100%",maxWidth:320,marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{fontSize:9,letterSpacing:2,color:"#444",textTransform:"uppercase"}}>{mode==="drums"?"🥁 барабаны ↑ / середина ↓":"🎚 усиление"}</div>
+              <div style={{fontSize:10,fontWeight:700,color:eq>0?"#ff9100":eq<0?"#00e5ff":"#444"}}>{eq>0?"+":""}{eq} dB</div>
+            </div>
+            <input type="range" min="-6" max="18" step="1" value={eq}
+                   style={{background:`linear-gradient(to right,#00e5ff 0%,#ff1744 ${(eq+6)/24*100}%,#2a2a2a ${(eq+6)/24*100}%,#2a2a2a 100%)`}}
+                   onChange={e=>{const v=+e.target.value;setEq(v);eqRef.current?.set(v);}}/>
+          </div>
+
+          {/* Controls */}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
+            <button style={S.btn} onClick={()=>{isPRef.current?resumeGame():pauseGame();}}>{paused?"▶":"⏸"} {paused?"ПРОДОЛЖИТЬ":"ПАУЗА"}</button>
+            <button style={S.btn} onClick={again}>↺ RESTART</button>
+            <button style={S.btn} onClick={stopGame}>■ СТОП</button>
+          </div>
+          <div style={{fontSize:9,color:"#1e1e1e",letterSpacing:2,marginTop:8,textAlign:"center"}}>
+            КЛАВИШИ: F G H J · ПРОБЕЛ — пауза
+          </div>
+        </div>
+      )}
+
+      {/* ── RESULT ── */}
+      {ph==="result"&&(
+        <div style={{textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:18}}>
+          <div style={{fontSize:11,letterSpacing:6,color:"#333",textTransform:"uppercase"}}>результат</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
+            <span style={{fontSize:9,color:diffRef.current?.color+"88",border:`1px solid ${diffRef.current?.color}33`,borderRadius:4,padding:"3px 10px",textTransform:"uppercase",letterSpacing:2}}>{diffRef.current?.label}</span>
+            <span style={{fontSize:9,color:M.color+"88",border:`1px solid ${M.color}33`,borderRadius:4,padding:"3px 10px",textTransform:"uppercase",letterSpacing:2}}>{M.emoji} {M.label}</span>
+            {bpm&&<span style={{fontSize:9,color:"#ff910088",border:"1px solid #ff910022",borderRadius:4,padding:"3px 10px"}}>♩{bpm.bpm}</span>}
+          </div>
+          <div style={{fontSize:60,fontWeight:900,color:"#fff",textShadow:"0 0 40px #ff1744",lineHeight:1}}>{score.toLocaleString()}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 44px"}}>
+            {[["ACCURACY",acc+"%"],["MAX COMBO","×"+maxCo],["PERFECT",stats.p],["GOOD",stats.g],["MISS",stats.m],["NOTES",totalN]].map(([l,v])=>(
+              <div key={l}><div style={{fontSize:9,letterSpacing:3,color:"#333",textTransform:"uppercase"}}>{l}</div><div style={{fontSize:22,fontWeight:700,color:"#bbb"}}>{v}</div></div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:4}}>
+            <button style={{...S.btn,borderColor:"#ff174466",color:"#ff1744"}} onClick={again}>↺ ЕЩЁ РАЗ</button>
+            <button style={S.btn} onClick={()=>setPh("modeSelect")}>🎸 ИНСТРУМЕНТ</button>
+            <button style={S.btn} onClick={()=>setPh("diff")}>☰ СЛОЖНОСТЬ</button>
+            <button style={S.btn} onClick={()=>setPh("lib")}>🎵 БИБЛИОТЕКА</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
